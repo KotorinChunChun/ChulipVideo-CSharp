@@ -16,8 +16,14 @@ public sealed class ExportService(FfmpegService media)
     private async Task<ExportResult> ExportCoreAsync(ExportRequest request, EventLog events, IProgress<ExportProgress>? progress, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        if (!double.IsFinite(request.Start) || !double.IsFinite(request.End) || request.Start < 0 || request.End <= request.Start || request.End > request.Media.Duration + .01)
+        if (!double.IsFinite(request.Start) || !double.IsFinite(request.End) || request.Start < 0 || request.Start >= request.Media.Duration || request.End <= request.Start || request.End > request.Media.Duration + .01)
             throw new ArgumentException("書き出し範囲は動画内の開始時刻から終了時刻までを指定してください。");
+        // プレビューと同じフレームを起点とし、区間の終了は次の格子まで広げる。
+        // 元要求を検証してから揃えることで、空区間や動画外の開始を最後のフレームへ変換しない。
+        double effectiveStart = request.Media.FrameTime(request.Start);
+        double frameCount = Math.Max(1, Math.Ceiling((request.End - effectiveStart) * request.Media.Fps - 1e-7));
+        double effectiveEnd = Math.Min(request.Media.Duration, effectiveStart + frameCount / request.Media.Fps);
+        request = request with { Start = effectiveStart, End = effectiveEnd };
         if (request.Crop.Width is < 1 or > 16384 || request.Crop.Height is < 1 or > 16384)
             throw new ArgumentException("出力サイズが無効です。");
         string target = Path.GetFullPath(request.OutputPath);
@@ -107,7 +113,7 @@ public sealed class ExportService(FfmpegService media)
                 bool duplicate = request.Settings.SkipDuplicates && lastSaved is not null && lastSaved.AsSpan().SequenceEqual(current.Pixels);
                 if (stable && !duplicate)
                 {
-                    double seconds = request.Start + index / request.Media.Fps;
+                    double seconds = request.Media.FrameTime(request.Start + index / request.Media.Fps);
                     using Bitmap rendered = OverlayRenderer.Render(current.Frame, request.Crop, seconds, events, request.Settings.Overlay);
                     string name = FormattableString.Invariant($"frame_{index:D8}_{seconds:F3}s.png");
                     SavePng(rendered, Path.Combine(output, name), request.Settings.PngCompression);
@@ -152,7 +158,7 @@ public sealed class ExportService(FfmpegService media)
                     ct.ThrowIfCancellationRequested();
                     using Bitmap? frame = await reader.ReadAsync(ct).ConfigureAwait(false);
                     if (frame is null) break;
-                    using Bitmap rendered = OverlayRenderer.Render(frame, request.Crop, request.Start + count / request.Media.Fps, events,
+                    using Bitmap rendered = OverlayRenderer.Render(frame, request.Crop, request.Media.FrameTime(request.Start + count / request.Media.Fps), events,
                         request.Settings.Overlay, request.Settings.BurnOverlay);
                     byte[] pixels = BitmapPixels.Bgra(rendered);
                     await encoder.StandardInput.BaseStream.WriteAsync(pixels, ct).ConfigureAwait(false);

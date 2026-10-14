@@ -247,7 +247,7 @@ public sealed class MainForm : BrandedForm
         using var frame=await media.ReadFrameAsync(source,time,lifetime.Token);
         return OverlayRenderer.Render(frame,crop,time,log,options);
     }
-    private static double FrameTime(double time,MediaInfo info)=>time>=info.LastFrameTime-1e-7?info.LastFrameTime:Math.Floor(time*info.Fps+1e-7)/info.Fps;
+    private static double FrameTime(double time,MediaInfo info)=>info.FrameTime(time);
     private async Task CopyAsync(){using var image=await CurrentImageAsync();Clipboard.SetImage(image);Status($"{image.Width}×{image.Height} の画像をコピーしました。");}
     private async Task SaveImageAsync()
     {

@@ -163,12 +163,7 @@ public sealed class FfmpegService
         return new FrameReader(FfmpegProcess.Start(Executable, args), width, height, count);
     }
 
-    internal static double NormalizeTime(MediaInfo info, double seconds)
-    {
-        double clamped = Math.Clamp(double.IsFinite(seconds) ? seconds : 0, 0, info.LastFrameTime);
-        if (clamped >= info.LastFrameTime - 1e-9) return info.LastFrameTime;
-        return Math.Floor(clamped * info.Fps + 1e-7) / info.Fps;
-    }
+    internal static double NormalizeTime(MediaInfo info, double seconds) => info.FrameTime(seconds);
     internal static string Number(double value) => value.ToString("0.#########", CultureInfo.InvariantCulture);
     private static double Parse(string value) => double.Parse(value, CultureInfo.InvariantCulture);
 }

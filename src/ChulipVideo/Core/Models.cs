@@ -5,6 +5,11 @@ public sealed record MediaInfo(string Path, int Width, int Height, double Durati
     public double? FinalFrameTime { get; init; }
     public string? TimingWarning { get; init; }
     public double LastFrameTime => FinalFrameTime ?? Math.Max(0, (Math.Max(1, Math.Round(Duration * Fps)) - 1) / Fps);
+    public double FrameTime(double seconds)
+    {
+        double clamped=Math.Clamp(double.IsFinite(seconds)?seconds:0,0,LastFrameTime);
+        return clamped>=LastFrameTime-1e-9?LastFrameTime:Math.Floor(clamped*Fps+1e-7)/Fps;
+    }
 }
 
 public readonly record struct CropRect(int X, int Y, int Width, int Height)

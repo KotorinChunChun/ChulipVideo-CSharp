@@ -110,6 +110,76 @@ public static class ExportTests
             Require(File.Exists(Path.ChangeExtension(movie, ".tsv")) && File.Exists(Path.ChangeExtension(movie, ".srt")) && File.Exists(Path.ChangeExtension(movie, ".vtt")), kind + "の字幕出力");
         }
 
+        // 0.35秒を選んだプレビューは0.30秒のフレーム。0.33秒の入力を先頭へ先取りしない。
+        var fractionalEvents = new EventLog([
+            new(.3,3,10,10,"None","None"), new(.33,3,15,15,"None","Ctrl,C"),
+            new(.41,4,20,20,"None","None"), new(.97,9,25,25,"None","Shift,Del")
+        ]);
+        var fractionalOptions = options with { ShowPointer = false, ShowClicks = false };
+        var fractionalSettings = settings with { Overlay = fractionalOptions, StableOnly = false, SkipDuplicates = false, BurnOverlay = true };
+        CropRect full = CropRect.Full(info);
+        foreach (ExportKind kind in new[] { ExportKind.PngSequence, ExportKind.Mp4, ExportKind.Gif })
+        {
+            string target = Path.Combine(directory, "非格子-" + kind + (kind == ExportKind.PngSequence ? "" : "." + kind.ToString().ToLowerInvariant()));
+            ExportResult result = await service.ExportAsync(new(info, full, .35, .96, target, kind, fractionalSettings), fractionalEvents, null, CancellationToken.None);
+            Require(result.FrameCount == 7, kind + "非格子区間を0.30～1.00秒へ広げた全7フレーム");
+            string sidecar = kind == ExportKind.PngSequence ? Path.Combine(target, "operations") : Path.ChangeExtension(target, null);
+            string actualTsv = await File.ReadAllTextAsync(sidecar + ".tsv");
+            string actualSrt = await File.ReadAllTextAsync(sidecar + ".srt");
+            string actualVtt = await File.ReadAllTextAsync(sidecar + ".vtt");
+            Require(actualTsv == fractionalEvents.ToTsv(.3, 1, info.Fps, full), kind + "のTSVが実開始・終了と一致");
+            Require(actualTsv.Contains("0.030\t0\t15\t15\tNone\tCtrl,C", StringComparison.Ordinal) &&
+                actualTsv.Contains("0.670\t6\t25\t25\tNone\tShift,Del", StringComparison.Ordinal), kind + "のTSVは0.30秒基準で拡張した終端の入力を保持");
+            Require(actualSrt == fractionalEvents.ToSubtitles(.3, 1, fractionalOptions, false) &&
+                actualSrt.StartsWith("1\n00:00:00,030 -->", StringComparison.Ordinal), kind + "のSRTは実開始から0.03秒後");
+            Require(actualVtt == fractionalEvents.ToSubtitles(.3, 1, fractionalOptions, true) &&
+                actualVtt.StartsWith("WEBVTT\n\n00:00:00.030 -->", StringComparison.Ordinal), kind + "のVTTは実開始から0.03秒後");
+            if (kind == ExportKind.PngSequence)
+            {
+                string[] frames = Directory.GetFiles(target, "*.png").Order(StringComparer.Ordinal).ToArray();
+                using Bitmap first = new(frames[0]);
+                using Bitmap sourceFirst = await media.ReadFrameAsync(info, .35);
+                using Bitmap expected = OverlayRenderer.Render(sourceFirst, full, info.FrameTime(.35), fractionalEvents, fractionalOptions);
+                Require(Equal(first, expected), "非格子PNGの先頭演出が単一画像・プレビューと同じ");
+                using Bitmap second = new(frames[1]);
+                using Bitmap sourceSecond = await media.ReadFrameAsync(info, .4);
+                using Bitmap expectedSecond = OverlayRenderer.Render(sourceSecond, full, info.FrameTime(.4), fractionalEvents, fractionalOptions);
+                Require(Equal(second, expectedSecond), "非格子PNGの次フレームで入力演出を表示");
+            }
+            else
+            {
+                MediaInfo exported = await media.ProbeAsync(target);
+                Require(Math.Abs(exported.Duration - .7) < .015, kind + "非格子区間の出力時間");
+                using Bitmap first = await media.ReadFrameAsync(exported, 0);
+                Require(IsSolidRed(first), kind + "先頭フレームへ0.33秒の演出を先取りしない");
+            }
+        }
+
+        string invalid = Path.Combine(directory, "空区間");
+        await ExpectFailureAsync<ArgumentException>(() => service.ExportAsync(new(info, full, .35, .35, invalid, ExportKind.PngSequence, settings), events, null, CancellationToken.None));
+        await ExpectFailureAsync<ArgumentException>(() => service.ExportAsync(new(info, full, info.Duration, info.Duration + .001, invalid, ExportKind.PngSequence, settings), events, null, CancellationToken.None));
+        Require(!Directory.Exists(invalid), "元の空区間・動画外開始を最後のフレームへ変換しない");
+
+        // Matroskaのミリ秒PTSはNTSCの格子と一致しない。末尾は実PTSを基準にする。
+        string terminalSource = Path.Combine(directory, "実PTS末尾.mkv");
+        await RunProcessAsync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-nostdin", "-n", "-framerate", "30000/1001", "-i",
+            Path.Combine(sourceFrames, "source_%03d.png"), "-c:v", "ffv1", terminalSource]);
+        MediaInfo terminalInfo = await media.ProbeAsync(terminalSource);
+        Require(terminalInfo.FinalFrameTime.HasValue && Math.Abs(terminalInfo.LastFrameTime * terminalInfo.Fps - Math.Round(terminalInfo.LastFrameTime * terminalInfo.Fps)) > 1e-5,
+            "最終PTSがFPS格子と異なる回帰素材");
+        double lastTime = terminalInfo.LastFrameTime;
+        var terminalEvents = new EventLog([new(lastTime,11,10,10,"None","None"), new(lastTime + .0001,11,10,10,"None","Ctrl,C")]);
+        string terminalOutput = Path.Combine(directory, "実PTS最後の1枚");
+        var terminalResult = await service.ExportAsync(new(terminalInfo, CropRect.Full(terminalInfo), lastTime + .01, terminalInfo.Duration,
+            terminalOutput, ExportKind.PngSequence, fractionalSettings), terminalEvents, null, CancellationToken.None);
+        Require(terminalResult.FrameCount == 1, "実PTSを起点とした最終1フレーム");
+        using (Bitmap terminalFrame = new(Directory.GetFiles(terminalOutput, "*.png").Single()))
+        using (Bitmap rawTerminal = await media.ReadFrameAsync(terminalInfo, terminalInfo.Duration))
+        using (Bitmap expectedTerminal = OverlayRenderer.Render(rawTerminal, CropRect.Full(terminalInfo), lastTime, terminalEvents, fractionalOptions))
+            Require(Equal(terminalFrame, expectedTerminal), "末尾の演出は格子の再丸めではなく実PTSを使用");
+        Require(await File.ReadAllTextAsync(Path.Combine(terminalOutput, "operations.tsv")) ==
+            terminalEvents.ToTsv(lastTime, terminalInfo.Duration, terminalInfo.Fps, CropRect.Full(terminalInfo)), "末尾TSVの基準も実PTSに一致");
+
         string collision = Path.Combine(directory, "既存.mp4");
         await File.WriteAllTextAsync(collision, "元データ");
         await ExpectFailureAsync<IOException>(() => service.ExportAsync(new(info, crop, 0, 1, collision, ExportKind.Mp4, settings), events, null, CancellationToken.None));
@@ -127,7 +197,7 @@ public static class ExportTests
             Require(!File.Exists(canceled) && !Directory.Exists(canceled), kind + "中止後に未完成出力を残さない");
         }
         Require(Directory.GetDirectories(directory, ".chulip-export-*").Length == 0, "作業用フォルダーの後始末");
-        Console.WriteLine("書き出し検証: 成功（PNG圧縮0～9、静止/重複、TSV/SRT/VTT、MP4/GIF、枠外、字幕、取消、既存保護）");
+        Console.WriteLine("書き出し検証: 成功（PNG圧縮0～9、静止/重複、TSV/SRT/VTT、MP4/GIF、枠外、字幕、非格子区間、取消、既存保護）");
     }
 
     private static bool Equal(Bitmap left, Bitmap right)
@@ -135,6 +205,17 @@ public static class ExportTests
         if (left.Size != right.Size) return false;
         for (int y = 0; y < left.Height; y++)
             for (int x = 0; x < left.Width; x++) if (left.GetPixel(x, y) != right.GetPixel(x, y)) return false;
+        return true;
+    }
+
+    private static bool IsSolidRed(Bitmap image)
+    {
+        for (int y = 0; y < image.Height; y++)
+            for (int x = 0; x < image.Width; x++)
+            {
+                Color color = image.GetPixel(x, y);
+                if (color.R < 240 || color.G > 12 || color.B > 12) return false;
+            }
         return true;
     }
 
