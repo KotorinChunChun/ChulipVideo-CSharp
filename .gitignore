@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+.vs/
+.local/
+artifacts/
+release/
+*.log
+/dev/history/*/logs/
