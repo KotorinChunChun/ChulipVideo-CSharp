@@ -24,3 +24,7 @@ cd C:\develop\KotorinToys\tools\ChulipVideo
 この開発環境では移植元にあったFFmpegを`.local/ffmpeg.exe`へ複製しています。Python本体への実行時依存はありません。別環境では「設定」でFFmpeg実行ファイルを指定するか、`CHULIPVIDEO_FFMPEG`環境変数にパスを設定してください。
 
 [操作・設定・開発手順](docs/guide.md) / [移植要求](dev/history/v0.1.0/v0.1.0-req.md) / [実装・検証報告](dev/history/v0.1.0/v0.1.0-imp.md)
+
+## KotorinToys管理連携（2026-10-15追加）
+
+本体の一覧からの開発版起動・既存画面表示・状態確認・正常停止に対応しました。上記移植時点の未登録範囲を、この追加で更新します。配布・正式インストール・外部公開は未実施です。[管理連携と検証用起動](docs/kotorintoys-integration.md)を参照してください。

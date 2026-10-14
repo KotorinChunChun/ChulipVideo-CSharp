@@ -40,6 +40,7 @@ public sealed class MainForm : BrandedForm
     private readonly List<CropRect> history=[];
     private int historyIndex=-1, seekVersion;
     private bool syncing,rendering,playing,loading,exporting,closing,shutdownComplete;
+    internal string? ManagementStopBlockReason => exporting || loading || rendering || closing ? "読込・描画・書き出し・終了処理中のため停止できません。" : null;
     private double currentTime,rangeStart,rangeEnd,playOrigin,previewTime;
     private Task? exportTask;
 

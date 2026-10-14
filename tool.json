@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "chulip-video",
+  "name": "ChulipVideo",
+  "version": "0.1.0",
+  "summary": "動画から手順書用の画像を切り出す",
+  "category": "動画・画像編集",
+  "executable": "artifacts/management/bin/ChulipVideo/debug/ChulipVideo.exe",
+  "installedExecutable": "ChulipVideo.exe",
+  "appId": "KotorinToys.ChulipVideo",
+  "manual": "docs/guide.md",
+  "readme": "README.md",
+  "shortcuts": "config/shortcuts.json",
+  "distributionStatus": "unpublished",
+  "supportedEnvironment": "windows11-x64",
+  "investigationStatus": "confirmed",
+  "capabilities": [
+    "status",
+    "show",
+    "stop",
+    "silent-start"
+  ],
+  "runtimes": [
+    {
+      "id": "dotnet-desktop",
+      "name": ".NET Desktop Runtime 10 (x64)",
+      "kind": "dotnet-desktop",
+      "major": 10,
+      "guide": "開発実行には.NET 10 SDK、フレームワーク依存EXEには.NET Desktop Runtime 10 x64が必要です。"
+    },
+    {
+      "id": "ffmpeg",
+      "name": "FFmpeg",
+      "kind": "external",
+      "optional": true,
+      "feature": "動画の読込・書き出し",
+      "guide": "設定でlibx264対応FFmpeg実行ファイルを指定してください。本体のSSCapture専用FFmpeg導入とは別設定です。"
+    }
+  ]
+}
