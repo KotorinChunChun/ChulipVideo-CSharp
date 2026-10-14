@@ -2,7 +2,9 @@ namespace ChulipVideo.Core;
 
 public sealed record MediaInfo(string Path, int Width, int Height, double Duration, double Fps)
 {
-    public double LastFrameTime => Math.Max(0, Duration - 1 / Fps);
+    public double? FinalFrameTime { get; init; }
+    public string? TimingWarning { get; init; }
+    public double LastFrameTime => FinalFrameTime ?? Math.Max(0, (Math.Max(1, Math.Round(Duration * Fps)) - 1) / Fps);
 }
 
 public readonly record struct CropRect(int X, int Y, int Width, int Height)
@@ -38,6 +40,11 @@ public sealed record OverlayOptions
     public bool ShowClicks { get; set; } = true;
     public bool ShowKeys { get; set; } = true;
     public string PointerColor { get; set; } = "#202020";
+    public string PointerShape { get; set; } = "cursor";
+    public string PointerFill { get; set; } = "";
+    public int PointerWidth { get; set; } = 2;
+    public string ClickShape { get; set; } = "circle";
+    public int ClickWidth { get; set; } = 3;
     public string LeftColor { get; set; } = "#FF4444";
     public string RightColor { get; set; } = "#4488FF";
     public string MiddleColor { get; set; } = "#44CC66";
@@ -50,6 +57,9 @@ public sealed record OverlayOptions
     public string FontFamily { get; set; } = "Yu Gothic UI";
     public string TextColor { get; set; } = "#FFFFFF";
     public string BackgroundColor { get; set; } = "#202020";
+    public string OutlineColor { get; set; } = "";
+    public int TextOffsetY { get; set; } = -2;
+    public int PaddingY { get; set; } = 5;
     public string Horizontal { get; set; } = "center";
     public string Vertical { get; set; } = "bottom";
     public int OffsetX { get; set; }
@@ -60,6 +70,8 @@ public sealed record AppSettings
 {
     public string FfmpegPath { get; set; } = "";
     public string LastVideoPath { get; set; } = "";
+    public int WindowWidth { get; set; } = 1000;
+    public int WindowHeight { get; set; } = 850;
     public double Speed { get; set; } = 1;
     public bool RangeOnly { get; set; }
     public bool Loop { get; set; }
