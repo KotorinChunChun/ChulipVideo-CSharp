@@ -21,8 +21,8 @@ public sealed class SettingsStore(string? path = null)
             settings.Presets = (settings.Presets ?? []).Where(p=>p is not null && p.Width is >0 and <=16384 && p.Height is >0 and <=16384).ToList();
             settings.FfmpegPath ??= "";
             settings.LastVideoPath ??= "";
-            settings.CanvasColor ??= "#20242B";
-            settings.CropColor ??= "#FF5566";
+            settings.CanvasColor ??= "#787878";
+            settings.CropColor ??= "#FF8C00";
             settings.Overlay ??= new();
             NormalizeOverlay(settings.Overlay);
             return settings;

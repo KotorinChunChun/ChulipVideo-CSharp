@@ -6,22 +6,25 @@ using EventLog = ChulipVideo.Export.EventLog;
 
 namespace ChulipVideo.UI;
 
-public sealed class MainForm : BrandedForm
+public sealed partial class MainForm : BrandedForm
 {
     private readonly SettingsStore store;
     private AppSettings settings;
     private readonly VideoCanvas canvas = new() { Dock=DockStyle.Fill };
     private readonly Timeline timeline = new() { Dock=DockStyle.Fill, Margin=Padding.Empty };
-    private readonly Label info = new() { Dock=DockStyle.Fill, AutoEllipsis=true, TextAlign=ContentAlignment.MiddleLeft, Text="動画を選択、またはここへドロップしてください。" };
+    private readonly TextBox sourcePath = new() { Dock=DockStyle.Fill, ReadOnly=true, AccessibleName="選択中の動画ファイル", PlaceholderText="動画を選択、またはドロップ", Margin=new Padding(4,7,4,3) };
+    private readonly Label info = new() { Dock=DockStyle.Fill, AutoEllipsis=true, TextAlign=ContentAlignment.MiddleLeft, Text="動画未選択", Margin=new Padding(3) };
     private readonly Label status = new() { Dock=DockStyle.Fill, AutoEllipsis=true, TextAlign=ContentAlignment.MiddleLeft, Text="準備完了" };
-    private readonly NumericUpDown start=Number("開始秒",0,864000,3), position=Number("現在秒",0,864000,3), end=Number("終了秒",0,864000,3);
+    private readonly TimecodeUpDown start=Timecode("開始時刻"), position=Timecode("現在時刻"), end=Timecode("終了時刻");
     private readonly NumericUpDown cropX=Number("X",-16384,32768), cropY=Number("Y",-16384,32768), cropW=Number("幅",1,16384), cropH=Number("高さ",1,16384);
     private readonly NumericUpDown speed=Number("再生速度",-9.9m,9.9m,1);
     private readonly CheckBox range=new(){Text="区間",AutoSize=true},loop=new(){Text="ループ",AutoSize=true},pingpong=new(){Text="往復",AutoSize=true};
-    private readonly CheckBox outside=new(){Text="枠外を許可",AutoSize=true},moveLock=new(){Text="移動固定",AutoSize=true},sizeLock=new(){Text="サイズ固定",AutoSize=true};
-    private readonly CheckBox pointer=new(){Text="マウス演出",AutoSize=true},keys=new(){Text="キー字幕",AutoSize=true},burn=new(){Text="動画に演出を焼込",AutoSize=true};
-    private readonly CheckBox stable=new(){Text="静止フレームのみ",AutoSize=true},duplicates=new(){Text="同一画像を除外",AutoSize=true};
-    private readonly ComboBox presets=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=190,AccessibleName="解像度プリセット"};
+    private readonly CheckBox outside=new(){Text="枠外許可",AutoSize=true},moveLock=new(){Text="座標固定",AutoSize=true},sizeLock=new(){Text="寸法固定",AutoSize=true};
+    private readonly CheckBox pointer=new(){Text="マウスポインタ",AutoSize=true},keys=new(){Text="キー入力字幕",AutoSize=true},burn=new(){Text="動画へ焼込み",AutoSize=true};
+    private readonly CheckBox stable=new(){Text="静止フレーム",AutoSize=true},duplicates=new(){Text="重複を除外",AutoSize=true};
+    private readonly ComboBox presets=new(){DropDownStyle=ComboBoxStyle.DropDownList,Dock=DockStyle.Fill,AccessibleName="解像度プリセット"};
+    private readonly ComboBox presetRatio=new(){DropDownStyle=ComboBoxStyle.DropDownList,Dock=DockStyle.Fill,AccessibleName="プリセット比率の絞り込み"};
+    private readonly NumericUpDown pngCompression=Number("PNG圧縮",0,9);
     private readonly Button play=new(){Text="▶ 再生",AutoSize=true,AccessibleName="再生・停止"};
     private readonly Button cancel=new(){Text="書出し中断",AutoSize=true,Enabled=false};
     private readonly ProgressBar progress=new(){Width=150,Height=22};
@@ -49,54 +52,24 @@ public sealed class MainForm : BrandedForm
         this.store=store; settings=initialSettings;
         Text=WindowTitle.Create(); MinimumSize=new Size(800,650); Size=new Size(settings.WindowWidth,settings.WindowHeight);
         StartPosition=FormStartPosition.CenterScreen; AllowDrop=true; KeyPreview=true;
-        var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=8,Padding=new Padding(8)};
-        foreach(var row in new[]{40F,28F,-1F,40F,40F,175F,76F,26F})layout.RowStyles.Add(row<0?new RowStyle(SizeType.Percent,100):new RowStyle(SizeType.Absolute,row));
-        var toolbar=Flow();
-        AddButton(toolbar,"動画を選択",()=>ChooseVideo(),"Ctrl+O",true);
-        AddButton(toolbar,"再読込",()=>RunUiAsync(()=>LoadAsync(current?.Path)),"動画・設定・TSVを読み直します",true);
-        AddButton(toolbar,"設定を保存",()=>SaveVideo(),"動画別設定を保存",true);
-        AddButton(toolbar,"フォルダー",()=>OpenFolder(),null,true);
-        AddButton(toolbar,"設定",()=>OpenSettings(),null,true);
-        AddButton(toolbar,"ヘルプ",()=>ShowHelp());
-        layout.Controls.Add(toolbar,0,0);layout.Controls.Add(info,0,1);layout.Controls.Add(canvas,0,2);layout.Controls.Add(timeline,0,3);
-        var playback=Flow();play.Click+=(_,_)=>TogglePlay(); playback.Controls.Add(play);busyControls.Add(play);
-        AddButton(playback,"|◀",()=>Seek(0),"Ctrl+Home",true); AddButton(playback,"−1秒",()=>Seek(currentTime-1),"Ctrl+←",true);
-        AddButton(playback,"+1秒",()=>Seek(currentTime+1),"Ctrl+→",true); AddButton(playback,"▶|",()=>Seek(current?.LastFrameTime??0),"Ctrl+End",true);
-        AddLabel(playback,"速度");playback.Controls.Add(speed);playback.Controls.AddRange([range,loop,pingpong]);
-        layout.Controls.Add(playback,0,4);
-        var tabs=new TabControl{Dock=DockStyle.Fill};var edit=new TabPage("範囲・クロップ");var exportOptions=new TabPage("画像抽出・演出");
-        tabs.TabPages.AddRange([edit,exportOptions]);
-        var editLayout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=4};
-        for(int i=0;i<4;i++)editLayout.RowStyles.Add(new RowStyle(SizeType.Percent,25));
-        var times=Flow();AddLabel(times,"開始");times.Controls.Add(start);AddButton(times,"現在→開始",()=>SetRange(currentTime,rangeEnd));AddLabel(times,"現在");times.Controls.Add(position);AddLabel(times,"終了");times.Controls.Add(end);AddButton(times,"現在→終了",()=>SetRange(rangeStart,currentTime));
-        editLayout.Controls.Add(times,0,0);
-        var crop=Flow();foreach(var pair in new[]{("X",cropX),("Y",cropY),("幅",cropW),("高さ",cropH)}){AddLabel(crop,pair.Item1);crop.Controls.Add(pair.Item2);}crop.Controls.Add(outside);
-        editLayout.Controls.Add(crop,0,1);
-        var presetRow=Flow();presetRow.Controls.Add(presets);AddButton(presetRow,"適用",()=>ApplyPreset());AddButton(presetRow,"登録",()=>SavePreset());AddButton(presetRow,"削除",()=>DeletePreset());presetRow.Controls.Add(moveLock);presetRow.Controls.Add(sizeLock);
-        editLayout.Controls.Add(presetRow,0,2);
-        var view=Flow();AddButton(view,"元に戻す",()=>Undo(),"Ctrl+Z");AddButton(view,"やり直し",()=>Redo(),"Ctrl+Y");AddButton(view,"全画面を選択",()=>SetCrop(current is null?new(0,0,1,1):CropRect.Full(current)));AddButton(view,"表示リセット",()=>canvas.ResetView(),"中ボタンをダブルクリック");AddLabel(view,"左:選択/移動  枠:サイズ  中:パン  ホイール:拡大");
-        editLayout.Controls.Add(view,0,3);edit.Controls.Add(editLayout);
-        var optionRows=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(8)};
-        var option1=Flow();option1.Height=32;option1.Width=700;option1.Controls.AddRange([stable,duplicates]);optionRows.Controls.Add(option1);
-        var option2=Flow();option2.Height=32;option2.Width=700;option2.Controls.AddRange([pointer,keys,burn]);optionRows.Controls.Add(option2);
-        optionRows.Controls.Add(new Label{AutoSize=true,Text="静止抽出は前後フレームの完全一致を判定します。圧縮率・字幕出力・演出の外観は「設定」で変更。"});
-        exportOptions.Controls.Add(optionRows);layout.Controls.Add(tabs,0,5);busyControls.Add(tabs);busyControls.Add(timeline);busyControls.Add(canvas);
-        var output=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=2};output.RowStyles.Add(new(SizeType.Percent,50));output.RowStyles.Add(new(SizeType.Percent,50));
-        var outputButtons=Flow();AddButton(outputButtons,"画像をコピー",()=>RunUiAsync(CopyAsync),"Ctrl+C",true);AddButton(outputButtons,"画像を保存",()=>RunUiAsync(SaveImageAsync),"Ctrl+S",true);AddButton(outputButtons,"PNG連番",()=>BeginExport(ExportKind.PngSequence),null,true);AddButton(outputButtons,"MP4保存",()=>BeginExport(ExportKind.Mp4),null,true);AddButton(outputButtons,"GIF保存",()=>BeginExport(ExportKind.Gif),null,true);
-        output.Controls.Add(outputButtons,0,0);var progressRow=Flow();progressRow.Controls.Add(progress);progressRow.Controls.Add(cancel);AddLabel(progressRow,"出力範囲: 開始を含み終了を含まない / 音声なし");output.Controls.Add(progressRow,0,1);layout.Controls.Add(output,0,6);layout.Controls.Add(status,0,7);Controls.Add(layout);
+        BuildLayout();
         cancel.Click+=(_,_)=>exportCancel?.Cancel();
         timeline.Seek+=Seek;timeline.StartChanged+=v=>SetRange(v,rangeEnd);timeline.EndChanged+=v=>SetRange(rangeStart,v);
         start.ValueChanged+=(_,_)=>{if(!syncing)SetRange((double)start.Value,rangeEnd);};end.ValueChanged+=(_,_)=>{if(!syncing)SetRange(rangeStart,(double)end.Value);};position.ValueChanged+=(_,_)=>{if(!syncing)Seek((double)position.Value);};
+        foreach(var editor in new[]{start,position,end})editor.Enter+=(_,_)=>StopPlaying();
         foreach(var n in new[]{cropX,cropY,cropW,cropH})n.ValueChanged+=(_,_)=>{if(!syncing)SetCrop(new((int)cropX.Value,(int)cropY.Value,(int)cropW.Value,(int)cropH.Value));};
         canvas.CropChanged+=(_,_)=>{SyncCrop();Redraw();};canvas.CropCommitted+=(_,_)=>RememberCrop();canvas.ViewChanged+=(_,_)=>UpdateInfo();
         outside.CheckedChanged+=(_,_)=>{canvas.AllowOutside=outside.Checked;if(!syncing)SetCrop(canvas.Crop);};
         moveLock.CheckedChanged+=(_,_)=>{canvas.MoveLocked=moveLock.Checked;cropX.Enabled=cropY.Enabled=!moveLock.Checked;};
         sizeLock.CheckedChanged+=(_,_)=>{canvas.SizeLocked=sizeLock.Checked;cropW.Enabled=cropH.Enabled=presets.Enabled=!sizeLock.Checked;};
         canvas.MouseDown+=(_,e)=>{if(e.Button==MouseButtons.XButton1)Seek(currentTime-1);if(e.Button==MouseButtons.XButton2)Seek(currentTime+1);};
-        speed.ValueChanged+=(_,_)=>{settings.Speed=(double)speed.Value;ResetClock();};
-        range.CheckedChanged+=(_,_)=>{settings.RangeOnly=range.Checked;StopPlaying();};loop.CheckedChanged+=(_,_)=>settings.Loop=loop.Checked;pingpong.CheckedChanged+=(_,_)=>settings.PingPong=pingpong.Checked;
-        pointer.CheckedChanged+=(_,_)=>{if(syncing)return;settings.Overlay.ShowPointer=pointer.Checked;settings.Overlay.ShowClicks=pointer.Checked;Redraw();};keys.CheckedChanged+=(_,_)=>{if(syncing)return;settings.Overlay.ShowKeys=keys.Checked;Redraw();};burn.CheckedChanged+=(_,_)=>settings.BurnOverlay=burn.Checked;
-        stable.CheckedChanged+=(_,_)=>settings.StableOnly=stable.Checked;duplicates.CheckedChanged+=(_,_)=>settings.SkipDuplicates=duplicates.Checked;
+        speed.ValueChanged+=(_,_)=>{if(syncing)return;settings.Speed=(double)speed.Value;ResetClock();};
+        range.CheckedChanged+=(_,_)=>{if(syncing)return;settings.RangeOnly=range.Checked;StopPlaying();};loop.CheckedChanged+=(_,_)=>{if(!syncing)settings.Loop=loop.Checked;};pingpong.CheckedChanged+=(_,_)=>{if(!syncing)settings.PingPong=pingpong.Checked;};
+        pointer.CheckedChanged+=(_,_)=>{if(syncing)return;settings.Overlay.ShowPointer=pointer.Checked;settings.Overlay.ShowClicks=pointer.Checked;Redraw();};keys.CheckedChanged+=(_,_)=>{if(syncing)return;settings.Overlay.ShowKeys=keys.Checked;Redraw();};burn.CheckedChanged+=(_,_)=>{if(!syncing)settings.BurnOverlay=burn.Checked;};
+        stable.CheckedChanged+=(_,_)=>{if(!syncing)settings.StableOnly=stable.Checked;};duplicates.CheckedChanged+=(_,_)=>{if(!syncing)settings.SkipDuplicates=duplicates.Checked;};
+        pngCompression.ValueChanged+=(_,_)=>{if(!syncing)settings.PngCompression=(int)pngCompression.Value;};
+        presetRatio.SelectedIndexChanged+=(_,_)=>RefreshPresets();
+        presets.SelectionChangeCommitted+=(_,_)=>ApplyPreset();
         DragEnter+=(_,e)=>e.Effect=e.Data?.GetDataPresent(DataFormats.FileDrop)==true?DragDropEffects.Copy:DragDropEffects.None;
         DragDrop+=(_,e)=>{if(e.Data?.GetData(DataFormats.FileDrop) is string[] paths && paths.Length>0&&!exporting&&!loading)RunUiAsync(()=>LoadAsync(paths[0]));};
         timer.Tick+=(_,_)=>PlaybackTick(); timer.Start();
@@ -105,10 +78,6 @@ public sealed class MainForm : BrandedForm
     }
 
     private static NumericUpDown Number(string label,decimal min,decimal max,int decimals=0) => new(){Minimum=min,Maximum=max,DecimalPlaces=decimals,Increment=decimals>0?0.1m:1,Width=decimals>0?90:76,AccessibleName=label,ThousandsSeparator=false};
-    private static FlowLayoutPanel Flow()=>new(){Dock=DockStyle.Fill,WrapContents=false,Margin=Padding.Empty,Padding=new Padding(0,2,0,0)};
-    private static void AddLabel(Control parent,string text)=>parent.Controls.Add(new Label{Text=text,AutoSize=true,Margin=new Padding(3,7,3,0)});
-    private void AddButton(Control parent,string text,Action action,string? tip=null,bool busy=false)
-    {var b=new Button{Text=text,AutoSize=true,Margin=new Padding(2,1,2,1),Padding=new Padding(2,0,2,0)};b.Click+=(_,_)=>action();parent.Controls.Add(b);if(tip is not null)tips.SetToolTip(b,tip);if(busy)busyControls.Add(b);}
     private async void RunUiAsync(Func<Task> action)
     {try{await action();}catch(OperationCanceledException){if(!closing)Status("中断しました。");}catch(Exception ex){if(!closing)ShowError(ex);}}
     private void Status(string message){if(!IsDisposed)status.Text=message;}
@@ -131,6 +100,7 @@ public sealed class MainForm : BrandedForm
             current=nextInfo;media=nextMedia;events=nextEvents;preview=new PreviewReader(media,current);
             rawPreview?.Dispose();rawPreview=null;canvas.Frame=null;
             settings.LastVideoPath=Path.GetFullPath(path);
+            sourcePath.Text=settings.LastVideoPath;tips.SetToolTip(sourcePath,settings.LastVideoPath);
             syncing=true;canvas.VideoSize=new(current.Width,current.Height);outside.Checked=videoSettings.AllowOutside;canvas.AllowOutside=outside.Checked;
             canvas.Crop=videoSettings.Crop;rangeStart=videoSettings.Start;rangeEnd=videoSettings.End;currentTime=videoSettings.Position;syncing=false;
             history.Clear();historyIndex=-1;RememberCrop();SyncTimes();SyncCrop();canvas.ResetView();RequestFrame();
@@ -139,7 +109,7 @@ public sealed class MainForm : BrandedForm
         finally {loading=false;SetBusy(false);}
     }
     private void UpdateInfo()
-    {if(current is not null)info.Text=$"{Path.GetFileName(current.Path)}  |  {current.Width}×{current.Height}  {current.Fps:0.###} fps  {current.Duration:0.###}秒  |  表示 {canvas.Zoom:0.##}倍";}
+    {if(current is not null){info.Text=$"{current.Duration:0.###}秒  {current.Width}×{current.Height}\n{canvas.Zoom*100:0}%  /  {current.Fps:0.###} FPS";tips.SetToolTip(info,$"{current.Width}×{current.Height}  {current.Fps:0.###} fps  {current.Duration:0.###}秒\n表示: 全体表示を100%とした倍率 {canvas.Zoom*100:0}%");}}
     private void Seek(double time)
     {if(current is null||loading||exporting)return;currentTime=Math.Clamp(time,0,current.LastFrameTime);ResetClock();SyncTimes();RequestFrame();}
     private void SetRange(double from,double to)
@@ -153,7 +123,9 @@ public sealed class MainForm : BrandedForm
     }
     private void SyncTimes()
     {
-        syncing=true;start.Value=(decimal)rangeStart;position.Value=(decimal)currentTime;end.Value=(decimal)rangeEnd;syncing=false;
+        bool wasSyncing=syncing;syncing=true;
+        try{start.Value=(decimal)rangeStart;position.Value=(decimal)currentTime;end.Value=(decimal)rangeEnd;}
+        finally{syncing=wasSyncing;}
         timeline.Duration=current?.Duration??0;timeline.Start=rangeStart;timeline.End=rangeEnd;timeline.Position=currentTime;timeline.Invalidate();UpdateInfo();
     }
     private void RequestFrame(){seekVersion++;if(!rendering)RunUiAsync(RenderLoopAsync);}
@@ -206,12 +178,25 @@ public sealed class MainForm : BrandedForm
     private void SetCrop(CropRect crop)
     {if(current is null)return;canvas.Crop=crop.Clamp(current.Width,current.Height,outside.Checked);SyncCrop();RememberCrop();Redraw();}
     private void SyncCrop()
-    {syncing=true;var c=canvas.Crop;cropX.Value=Math.Clamp(c.X,(int)cropX.Minimum,(int)cropX.Maximum);cropY.Value=Math.Clamp(c.Y,(int)cropY.Minimum,(int)cropY.Maximum);cropW.Value=Math.Clamp(c.Width,1,16384);cropH.Value=Math.Clamp(c.Height,1,16384);syncing=false;}
+    {
+        bool wasSyncing=syncing;syncing=true;
+        try{var c=canvas.Crop;cropX.Value=Math.Clamp(c.X,(int)cropX.Minimum,(int)cropX.Maximum);cropY.Value=Math.Clamp(c.Y,(int)cropY.Minimum,(int)cropY.Maximum);cropW.Value=Math.Clamp(c.Width,1,16384);cropH.Value=Math.Clamp(c.Height,1,16384);SelectCurrentPreset();}
+        finally{syncing=wasSyncing;}
+    }
     private void RememberCrop()
     {if(current is null)return;var crop=canvas.Crop;if(historyIndex>=0&&history[historyIndex]==crop)return;if(historyIndex+1<history.Count)history.RemoveRange(historyIndex+1,history.Count-historyIndex-1);history.Add(crop);historyIndex=history.Count-1;}
     private void Undo(){if(historyIndex>0){canvas.Crop=history[--historyIndex];SyncCrop();Redraw();}}
     private void Redo(){if(historyIndex+1<history.Count){canvas.Crop=history[++historyIndex];SyncCrop();Redraw();}}
-    private void ApplyPreset(){if(!sizeLock.Checked&&presets.SelectedItem is ResolutionPreset preset)SetCrop(canvas.Crop with{Width=preset.Width,Height=preset.Height});}
+    private void ApplyPreset()
+    {
+        if(current is null||sizeLock.Checked||presets.SelectedItem is not ResolutionPreset preset)return;
+        int selected=presets.SelectedIndex;
+        SetCrop(canvas.Crop with{Width=preset.Width,Height=preset.Height});
+        // 動画内へ制限されても、削除対象が別のプリセットへ入れ替わらないよう選択を保持する。
+        presets.SelectedIndex=selected;
+        if(canvas.Crop.Width!=preset.Width||canvas.Crop.Height!=preset.Height)
+            Status($"プリセット「{preset.Name}」を適用: {canvas.Crop.Width}×{canvas.Crop.Height} px（動画内に収めました）");
+    }
     private void SavePreset()
     {
         if(current is null)return;
@@ -221,7 +206,26 @@ public sealed class MainForm : BrandedForm
         settings.Presets.Add(new(text.Text.Trim(),canvas.Crop.Width,canvas.Crop.Height));RefreshPresets();TrySaveApp();
     }
     private void DeletePreset(){if(presets.SelectedItem is ResolutionPreset p){settings.Presets.Remove(p);RefreshPresets();TrySaveApp();}}
-    private void RefreshPresets(){presets.Items.Clear();presets.Items.AddRange(settings.Presets.Cast<object>().ToArray());if(presets.Items.Count>0)presets.SelectedIndex=0;}
+    private void RefreshPresets()
+    {
+        presets.BeginUpdate();
+        try
+        {
+            presets.Items.Clear();presets.Items.Add("カスタム");
+            double? ratio=presetRatio.SelectedIndex switch{1=>16d/9,2=>4d/3,3=>1d,_=>null};
+            var visible=settings.Presets.Where(p=>ratio is null||Math.Abs(p.Width/(double)p.Height-ratio.Value)<0.01);
+            presets.Items.AddRange(visible.Cast<object>().ToArray());SelectCurrentPreset();
+        }
+        finally{presets.EndUpdate();}
+    }
+    private void SelectCurrentPreset()
+    {
+        if(presets.Items.Count==0)return;
+        var crop=canvas.Crop;int selected=0;
+        if(presets.SelectedItem is ResolutionPreset currentPreset&&currentPreset.Width==crop.Width&&currentPreset.Height==crop.Height)return;
+        for(int i=1;i<presets.Items.Count;i++)if(presets.Items[i] is ResolutionPreset p&&p.Width==crop.Width&&p.Height==crop.Height){selected=i;break;}
+        presets.SelectedIndex=selected;
+    }
     private void SaveVideo()
     {
         if(current is null)return;
@@ -232,14 +236,26 @@ public sealed class MainForm : BrandedForm
     {StopPlaying();using var form=new SettingsForm(settings);if(form.ShowDialog(this)==DialogResult.OK){settings=form.Settings;ApplySettings();TrySaveApp();Redraw();}}
     private void ApplySettings()
     {
-        syncing=true;
-        speed.Value=(decimal)settings.Speed;range.Checked=settings.RangeOnly;loop.Checked=settings.Loop;pingpong.Checked=settings.PingPong;
-        pointer.Checked=settings.Overlay.ShowPointer||settings.Overlay.ShowClicks;keys.Checked=settings.Overlay.ShowKeys;burn.Checked=settings.BurnOverlay;stable.Checked=settings.StableOnly;duplicates.Checked=settings.SkipDuplicates;
-        canvas.CropColor=settings.CropColor;canvas.CanvasColor=settings.CanvasColor;RefreshPresets();
-        syncing=false;
+        bool wasSyncing=syncing;syncing=true;
+        try
+        {
+            speed.Value=(decimal)settings.Speed;range.Checked=settings.RangeOnly;loop.Checked=settings.Loop;pingpong.Checked=settings.PingPong;
+            pointer.Checked=settings.Overlay.ShowPointer||settings.Overlay.ShowClicks;keys.Checked=settings.Overlay.ShowKeys;burn.Checked=settings.BurnOverlay;stable.Checked=settings.StableOnly;duplicates.Checked=settings.SkipDuplicates;
+            pngCompression.Value=settings.PngCompression;
+            canvas.CropColor=settings.CropColor;canvas.CanvasColor=settings.CanvasColor;RefreshPresets();
+        }
+        finally{syncing=wasSyncing;}
     }
     private void OpenFolder()
     {if(current is not null)Process.Start(new ProcessStartInfo("explorer.exe"){UseShellExecute=true,Arguments=$"/select,\"{current.Path}\""});}
+    private void OpenInputLog()
+    {
+        if(current is null)return;
+        string path=Path.ChangeExtension(current.Path,".tsv");
+        if(!File.Exists(path)){Status("対応する入力履歴TSVはありません: "+path);return;}
+        try{Process.Start(new ProcessStartInfo(path){UseShellExecute=true});}
+        catch(Exception ex) when(ex is System.ComponentModel.Win32Exception or InvalidOperationException){ShowError(ex);}
+    }
     private async Task<Bitmap> CurrentImageAsync()
     {
         if(current is null||media is null)throw new InvalidOperationException("先に動画を選択してください。");StopPlaying();
@@ -281,14 +297,16 @@ public sealed class MainForm : BrandedForm
         finally{exporting=false;exportCancel?.Dispose();exportCancel=null;if(!closing){cancel.Enabled=false;SetBusy(false);}}
     }
     private void SetBusy(bool busy){foreach(var c in busyControls)c.Enabled=!busy;speed.Enabled=range.Enabled=loop.Enabled=pingpong.Enabled=!busy;}
-    private void ShowHelp()=>MessageBox.Show(this,"動画を選択し、開始・終了とクロップを指定して保存します。\n\nSpace: 再生/停止　←/→: 0.1秒　Ctrl+←/→: 1秒\nHome/End: 区間端　Ctrl+Home/End: 動画端\nCtrl+C: 画像コピー　Ctrl+S: PNG保存　Ctrl+Z/Y: 戻す/進む\nAlt+矢印: 1px移動　Shift+矢印: 中心固定で伸縮（Ctrl併用10px）\n左ドラッグ: 選択/移動　枠ドラッグ: サイズ変更\nShift: 比率/移動軸を固定　Ctrl: 中心固定　Alt: 10px刻み\nホイール: ズーム　中ドラッグ: パン　中ダブルクリック: リセット\n\n動画と同名のTSVがあればマウス・キー操作を表示します。\n動画別設定は「設定を保存」で保存します。Python版.settings.jsonも読み込めます。\nMP4/GIFは音声なし。「動画に演出を焼込」は設定で変更できます。",WindowTitle.Create("使い方"));
+    private void ShowHelp()=>MessageBox.Show(this,"動画を選択し、開始・終了とクロップを指定して保存します。\n\nSpace: 再生/停止　←/→: 0.1秒　Ctrl+←/→: 1秒\nHome/End: 区間端　Ctrl+Home/End: 動画端\nI/O: 現在位置を開始/終了に設定（文字・数値入力中を除く）\nCtrl+C: 画像コピー　Ctrl+S: PNG保存　Ctrl+Z/Y: 戻す/進む\nAlt+矢印: 1px移動　Shift+矢印: 中心固定で伸縮（Ctrl併用10px）\n左ドラッグ: 選択/移動　枠ドラッグ: サイズ変更\nShift: 比率/移動軸を固定　Ctrl: 中心固定　Alt: 10px刻み\nホイール: ズーム　中ドラッグ: パン　中ダブルクリック: リセット\n\n時刻は秒数、mm:ss、hh:mm:ss.fffで入力できます。\nクロップの「比率」はプリセットの絞り込み用です。枠の比率は固定しません。\n動画と同名のTSVがあればマウス・キー操作を表示します。\n動画別設定は上部の「保存」で保存します。Python版.settings.jsonも読み込めます。\nMP4/GIFは音声なし。「動画へ焼込み」は出力欄で変更できます。",WindowTitle.Create("使い方"));
 
     protected override bool ProcessCmdKey(ref Message msg,Keys keyData)
     {
         if(exporting||loading)return base.ProcessCmdKey(ref msg,keyData);
         var key=keyData&Keys.KeyCode;var ctrl=(keyData&Keys.Control)!=0;var alt=(keyData&Keys.Alt)!=0;var shift=(keyData&Keys.Shift)!=0;
         if(ctrl&&key==Keys.O){ChooseVideo();return true;}
-        if(ActiveControl is TextBoxBase or NumericUpDown || ContainsFocusedNumeric(this))return base.ProcessCmdKey(ref msg,keyData);
+        if(ActiveControl is TextBoxBase or NumericUpDown or ComboBox || ContainsFocusedNumeric(this))return base.ProcessCmdKey(ref msg,keyData);
+        if(!ctrl&&!alt&&!shift&&key==Keys.I){SetRange(currentTime,rangeEnd);return true;}
+        if(!ctrl&&!alt&&!shift&&key==Keys.O){SetRange(rangeStart,currentTime);return true;}
         if(ctrl&&key==Keys.C){RunUiAsync(CopyAsync);return true;}if(ctrl&&key==Keys.S){RunUiAsync(SaveImageAsync);return true;}if(ctrl&&key==Keys.Z){Undo();return true;}if(ctrl&&key==Keys.Y){Redo();return true;}
         if(key==Keys.Space){TogglePlay();return true;}if(key==Keys.Home){Seek(ctrl?0:rangeStart);return true;}if(key==Keys.End){Seek(ctrl?(current?.LastFrameTime??0):rangeEnd);return true;}
         if(key is Keys.Left or Keys.Right or Keys.Up or Keys.Down)

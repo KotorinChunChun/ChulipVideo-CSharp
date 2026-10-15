@@ -27,14 +27,14 @@ public sealed class SettingsForm : BrandedForm
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 130));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         var tabs = new TabControl { Dock = DockStyle.Fill };
-        var export = AddTab(tabs, "出力・FFmpeg");
         var pointer = AddTab(tabs, "ポインター・クリック");
         var subtitle = AddTab(tabs, "入力字幕");
         var theme = AddTab(tabs, "テーマ");
-        BuildExport(export);
+        var export = AddTab(tabs, "出力・FFmpeg");
         BuildPointer(pointer);
         BuildSubtitle(subtitle);
         BuildTheme(theme);
+        BuildExport(export);
         root.Controls.Add(tabs, 0, 0);
         preview.Paint += PaintPreview;
         preview.Resize += (_, _) => preview.Invalidate();
@@ -45,7 +45,7 @@ public sealed class SettingsForm : BrandedForm
             WrapContents = false, Padding = new Padding(0, 5, 0, 0)
         };
         var cancel = new Button { Text = "キャンセル", DialogResult = DialogResult.Cancel, Size = new Size(110, 30) };
-        var accept = new Button { Text = "OK", Size = new Size(110, 30) };
+        var accept = new Button { Text = "保存", Size = new Size(110, 30) };
         accept.Click += (_, _) => AcceptSettings();
         buttons.Controls.Add(cancel);
         buttons.Controls.Add(accept);
@@ -167,7 +167,7 @@ public sealed class SettingsForm : BrandedForm
     {
         Row(table, "キャンバス背景色", ColorInput("キャンバス背景色", Settings.CanvasColor, x => Settings.CanvasColor = x));
         Row(table, "切り出し枠の色", ColorInput("切り出し枠の色", Settings.CropColor, x => Settings.CropColor = x));
-        Note(table, "下の表示は色と形の見本です。動画外の切り出し部分は常に黒く出力します。\n設定は OK で適用し、キャンセルすると編集内容を破棄します。");
+        Note(table, "下の表示は色と形の見本です。動画外の切り出し部分は常に黒く出力します。\n設定は「保存」で適用し、キャンセルすると編集内容を破棄します。");
     }
 
     private CheckBox Check(bool value, Action<bool> apply)
@@ -262,9 +262,9 @@ public sealed class SettingsForm : BrandedForm
     {
         var g = e.Graphics;
         var o = Settings.Overlay;
-        g.Clear(ColorOf(Settings.CanvasColor, Color.DimGray));
+        g.Clear(ColorOf(Settings.CanvasColor, Color.FromArgb(120, 120, 120)));
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var cropPen = new Pen(ColorOf(Settings.CropColor, Color.IndianRed), 2);
+        using var cropPen = new Pen(ColorOf(Settings.CropColor, Color.DarkOrange), 2) { DashStyle = DashStyle.Dash };
         var bounds = new Rectangle(8, 8, Math.Max(1, preview.Width - 17), Math.Max(1, preview.Height - 17));
         g.DrawRectangle(cropPen, bounds);
         using var labelFont = new Font(Font.FontFamily, 9);

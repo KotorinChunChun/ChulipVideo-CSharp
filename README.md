@@ -1,6 +1,6 @@
 # ChulipVideo
 
-動画から手順書用の画像を切り出す、C#/.NET 10 Windows Formsアプリです。Python版の編集・画像抽出機能を独立して移植しました。
+動画から手順書用の画像を切り出す、C#/.NET 10 Windows Formsアプリです。Python版の編集・画像抽出機能を独立して移植しました。v0.2.0ではPython実画面とRust/Tauri試作を参考に、再生・トリム・クロップ・出力を一画面へまとめています。
 
 ## 主な機能
 
@@ -12,7 +12,7 @@
 
 録画はCapchunScreen、外部ウィンドウ操作はChunapToolを利用する構成です。ChulipVideoには含めていません。
 
-## 起動
+## 開発版の起動
 
 Windowsと.NET 10 SDK、FFmpegが必要です。PowerShell 7で実行します。
 
@@ -23,8 +23,8 @@ cd C:\develop\KotorinToys\tools\ChulipVideo
 
 この開発環境では移植元にあったFFmpegを`.local/ffmpeg.exe`へ複製しています。Python本体への実行時依存はありません。別環境では「設定」でFFmpeg実行ファイルを指定するか、`CHULIPVIDEO_FFMPEG`環境変数にパスを設定してください。
 
-[操作・設定・開発手順](docs/guide.md) / [移植要求](dev/history/v0.1.0/v0.1.0-req.md) / [実装・検証報告](dev/history/v0.1.0/v0.1.0-imp.md)
+[操作・設定・開発手順](docs/guide.md) / [配布ZIPの作成手順](docs/release.md) / [v0.2.0 要求](dev/history/v0.2.0/v0.2.0-req.md) / [実装・検証報告](dev/history/v0.2.0/v0.2.0-imp.md)
 
 ## KotorinToys管理連携（2026-10-15追加）
 
-本体の一覧からの開発版起動・既存画面表示・状態確認・正常停止に対応しました。上記移植時点の未登録範囲を、この追加で更新します。配布・正式インストール・外部公開は未実施です。[管理連携と検証用起動](docs/kotorintoys-integration.md)を参照してください。
+本体の一覧からの開発版起動・既存画面表示・状態確認・正常停止に対応しています。単体ZIPの配布と本体の正式導入・更新カタログは別管理です。[管理連携と検証用起動](docs/kotorintoys-integration.md)を参照してください。

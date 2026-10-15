@@ -75,7 +75,7 @@ public sealed record AppSettings
 {
     public string FfmpegPath { get; set; } = "";
     public string LastVideoPath { get; set; } = "";
-    public int WindowWidth { get; set; } = 1000;
+    public int WindowWidth { get; set; } = 1200;
     public int WindowHeight { get; set; } = 850;
     public double Speed { get; set; } = 1;
     public bool RangeOnly { get; set; }
@@ -88,8 +88,8 @@ public sealed record AppSettings
     public bool ExportTsv { get; set; } = true;
     public bool ExportSrt { get; set; }
     public bool ExportVtt { get; set; }
-    public string CanvasColor { get; set; } = "#20242B";
-    public string CropColor { get; set; } = "#FF5566";
+    public string CanvasColor { get; set; } = "#787878";
+    public string CropColor { get; set; } = "#FF8C00";
     public OverlayOptions Overlay { get; set; } = new();
     public List<ResolutionPreset> Presets { get; set; } = [new("VGA",640,480),new("SVGA",800,600),new("HD",1280,720),new("FHD",1920,1080),new("正方形",1080,1080),new("縦型",1080,1920),new("アイコン",32,32)];
 }

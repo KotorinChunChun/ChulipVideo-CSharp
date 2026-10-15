@@ -22,7 +22,8 @@ public sealed class Timeline : Control
         g.DrawLine(gray,14,20,Width-14,20); g.DrawLine(selected,X(Start),20,X(End),20);
         g.FillPolygon(Brushes.ForestGreen,[new PointF(X(Start)-6,4),new PointF(X(Start)+6,4),new PointF(X(Start),15)]);
         g.FillPolygon(Brushes.IndianRed,[new PointF(X(End)-6,36),new PointF(X(End)+6,36),new PointF(X(End),25)]);
-        g.FillEllipse(Brushes.RoyalBlue,X(Position)-6,14,12,12);
+        g.FillEllipse(Brushes.White,X(Position)-6,14,12,12);
+        g.DrawEllipse(Pens.Black,X(Position)-6,14,12,12);
     }
     protected override void OnMouseDown(MouseEventArgs e)
     {

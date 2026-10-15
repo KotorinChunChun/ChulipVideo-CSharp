@@ -11,7 +11,7 @@ public sealed class VideoCanvas : Control
     private CropRect crop = new(0, 0, 1, 1);
     private bool allowOutside;
     private bool moveLocked, sizeLocked;
-    private string cropColor = "#FF5566", canvasColor = "#20242B";
+    private string cropColor = "#FF8C00", canvasColor = "#787878";
     private double zoom = 1;
     private PointF pan;
     private DragMode drag;
@@ -20,6 +20,7 @@ public sealed class VideoCanvas : Control
     private CropRect cropStart;
     private int edgeX, edgeY;
     private MouseButtons dragButton;
+    private Point? hoverPosition;
 
     private enum DragMode { None, Create, Move, Resize, Pan }
 
@@ -127,7 +128,7 @@ public sealed class VideoCanvas : Control
     {
         base.OnPaint(e);
         var g = e.Graphics;
-        g.Clear(ParseColor(canvasColor, Color.FromArgb(32, 36, 43)));
+        g.Clear(ParseColor(canvasColor, Color.FromArgb(120, 120, 120)));
         if (!HasVideo)
         {
             TextRenderer.DrawText(g, "動画を開くか、ここへドロップしてください", Font, ClientRectangle,
@@ -154,17 +155,20 @@ public sealed class VideoCanvas : Control
         }
         using var framePen = new Pen(Color.FromArgb(130, Color.White));
         g.DrawRectangle(framePen, imageRect.X, imageRect.Y, imageRect.Width, imageRect.Height);
-        var color = ParseColor(cropColor, Color.IndianRed);
-        using var cropPen = new Pen(color, 2);
+        var color = ParseColor(cropColor, Color.DarkOrange);
+        bool active = Focused || drag is DragMode.Create or DragMode.Move or DragMode.Resize;
+        // 独自の保存色は維持し、既定配色だけ原型と同じ赤で注目状態を示す。
+        if ((active || IsCropHovered) && color.ToArgb() == Color.DarkOrange.ToArgb()) color = Color.Red;
+        using var cropPen = new Pen(color, 2) { DashStyle = active ? DashStyle.Solid : DashStyle.Dash };
         g.DrawRectangle(cropPen, cropRect.X, cropRect.Y, cropRect.Width, cropRect.Height);
         if (!SizeLocked)
         {
-            using var fill = new SolidBrush(color);
+            using var handlePen = new Pen(color);
             foreach (var (_, _, point) in Handles(cropRect))
             {
                 var r = new RectangleF(point.X - HandleRadius, point.Y - HandleRadius, HandleRadius * 2, HandleRadius * 2);
-                g.FillRectangle(fill, r);
-                g.DrawRectangle(Pens.White, r.X, r.Y, r.Width, r.Height);
+                g.FillRectangle(Brushes.White, r);
+                g.DrawRectangle(handlePen, r.X, r.Y, r.Width, r.Height);
             }
         }
         string caption = $"{crop.Width} × {crop.Height} px  ({crop.X}, {crop.Y})";
@@ -199,6 +203,9 @@ public sealed class VideoCanvas : Control
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
+        bool wasHovered = IsCropHovered;
+        hoverPosition = e.Location;
+        if (wasHovered != IsCropHovered) Invalidate();
         if (!HasVideo) return;
         if (drag == DragMode.None) { UpdateCursor(e.Location); return; }
         if (drag == DragMode.Pan)
@@ -238,6 +245,36 @@ public sealed class VideoCanvas : Control
                 Crop = ResizeCrop(dx, dy, shift, center);
                 break;
         }
+    }
+
+    private bool IsCropHovered
+    {
+        get
+        {
+            if (!HasVideo || hoverPosition is not Point point) return false;
+            var bounds = ToClient(crop);
+            bounds.Inflate(HandleRadius + 4, HandleRadius + 4);
+            return bounds.Contains(point);
+        }
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        hoverPosition = null;
+        Invalidate();
+    }
+
+    protected override void OnGotFocus(EventArgs e)
+    {
+        base.OnGotFocus(e);
+        Invalidate();
+    }
+
+    protected override void OnLostFocus(EventArgs e)
+    {
+        base.OnLostFocus(e);
+        Invalidate();
     }
 
     private CropRect ResizeCrop(int dx, int dy, bool keepRatio, bool centered)
