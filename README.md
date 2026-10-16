@@ -12,6 +12,10 @@
 
 録画はCapchunScreen、外部ウィンドウ操作はChunapToolを利用する構成です。ChulipVideoには含めていません。
 
+## 配布版
+
+[GitHub Releases](https://github.com/KotorinChunChun/ChulipVideo-CSharp/releases/latest)からWindows x64向けZIPを取得し、すべて展開して`ChulipVideo.exe`を実行してください。.NET Desktop Runtimeは同梱しています。FFmpegは別途用意し、設定画面から`ffmpeg.exe`を指定してください。
+
 ## 開発版の起動
 
 Windowsと.NET 10 SDK、FFmpegが必要です。PowerShell 7で実行します。
