@@ -6,3 +6,14 @@ artifacts/
 release/
 *.log
 /dev/history/*/logs/
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.pem
+*.key
+*.sqlite*
+*.db
+*.db-wal
+*.db-shm

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "chulip-video",
   "name": "ChulipVideo",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "summary": "動画から手順書用の画像を切り出す",
   "category": "動画・画像編集",
   "executable": "artifacts/management/bin/ChulipVideo/debug/ChulipVideo.exe",
@@ -11,7 +11,8 @@
   "manual": "docs/guide.md",
   "readme": "README.md",
   "shortcuts": "config/shortcuts.json",
-  "distributionStatus": "unpublished",
+  "distributionStatus": "published",
+  "repositoryUrl": "https://github.com/KotorinChunChun/ChulipVideo-CSharp",
   "supportedEnvironment": "windows11-x64",
   "investigationStatus": "confirmed",
   "capabilities": [

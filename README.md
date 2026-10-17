@@ -14,7 +14,7 @@
 
 ## 配布版
 
-[GitHub Releases](https://github.com/KotorinChunChun/ChulipVideo-CSharp/releases/latest)からWindows x64向けZIPを取得し、すべて展開して`ChulipVideo.exe`を実行してください。.NET Desktop Runtimeは同梱しています。FFmpegは別途用意し、設定画面から`ffmpeg.exe`を指定してください。
+[C#版GitHub Releases](https://github.com/KotorinChunChun/ChulipVideo-CSharp/releases)の`ChulipVideo-0.2.1-setup.exe`で利用者単位に導入できます。KotorinToys 0.1.2以降からの導入・更新・削除にも対応します。設定・動画・画像は保持します。[導入ガイド](docs/install.md)を確認してください。既存のZIPは展開して実行する方式として保持します。.NET Desktop Runtimeを同梱し、FFmpegは別途設定します。
 
 ## 開発版の起動
 

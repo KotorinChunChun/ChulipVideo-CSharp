@@ -1,5 +1,7 @@
 # ChulipVideo C#版の配布手順
 
+0.2.1から、本体対応Inno形式のsetup.exe・製品別配布台帳・SHA-256を追加します。この形式は親KotorinToysの`dev/scripts/publish-packages.ps1 -Products ChulipVideo`と`build-installers.ps1`で生成し、`publish-releases.ps1`で固定先ChulipVideo-CSharpへ公開します。以下は従来の単体ZIP生成手順で、削除・置換せず残します。[導入方法](install.md)を参照してください。
+
 Windows 11 x64向けの自己完結型ZIPを作ります。.NET Desktop Runtime 10 x64は同梱し、FFmpegは利用者の既存の実行ファイルを指定して使用します。インストーラーは生成しません。
 
 ## 配布前の準備
