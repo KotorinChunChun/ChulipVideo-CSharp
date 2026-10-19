@@ -10,6 +10,7 @@ public static class MediaTests
     {
         Directory.CreateDirectory(outputDirectory);
         FfmpegService service = new(ffmpeg);
+        await RejectRemotePlaylistAsync(service, outputDirectory);
         Check(FfmpegService.FindExecutable(ffmpeg) == Path.GetFullPath(ffmpeg), "指定 FFmpeg の検出");
         string video = Path.Combine(outputDirectory, "色変化 日本語.mp4");
         await GenerateAsync(ffmpeg,
@@ -131,6 +132,20 @@ public static class MediaTests
         await using (FrameReader reader = service.OpenReader(info, 0, info.Duration))
             await ThrowsAsync<OperationCanceledException>(() => reader.ReadAsync(canceled.Token), "連続読み取りキャンセル");
         Console.WriteLine("メディア検証: 成功（情報、色、範囲、シーク、回転、SAR、縮小、破損、キャンセル）");
+    }
+
+    private static async Task RejectRemotePlaylistAsync(FfmpegService service, string directory)
+    {
+        using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        string path = Path.Combine(directory, "外部参照を含む動画.m3u8");
+        await File.WriteAllTextAsync(path, $"#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:1\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:1,\nhttp://127.0.0.1:{port}/segment.ts\n#EXT-X-ENDLIST\n");
+        bool denied = false;
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        try { await service.ProbeAsync(path, deadline.Token); }
+        catch (IOException error) when (error.Message.Contains("whitelist", StringComparison.OrdinalIgnoreCase)) { denied = true; }
+        Check(denied && !listener.Pending(), "動画内の外部参照をネットワーク接続前に拒否");
     }
 
     private static bool IsRed(Bitmap frame) { Color c = frame.GetPixel(frame.Width / 2, frame.Height / 2); return c.R > 200 && c.B < 40; }

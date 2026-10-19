@@ -29,6 +29,9 @@ internal sealed class FfmpegProcess : IAsyncDisposable
             RedirectStandardOutput = true, RedirectStandardError = true,
             StandardErrorEncoding = Encoding.UTF8
         };
+        // ローカル動画内のプレイリスト等からHTTP/TCPへ接続させない。
+        start.ArgumentList.Add("-protocol_whitelist");
+        start.ArgumentList.Add("file,pipe");
         foreach (string argument in arguments) start.ArgumentList.Add(argument);
         Process process = new() { StartInfo = start };
         try
