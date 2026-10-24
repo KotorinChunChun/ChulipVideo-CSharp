@@ -22,16 +22,14 @@ public sealed class FfmpegService
         string[] candidates =
         [
             Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe"),
-            Path.Combine(AppContext.BaseDirectory, ".tools", "ffmpeg", "bin", "ffmpeg.exe"),
-            Path.Combine(Environment.CurrentDirectory, ".local", "ffmpeg.exe")
+            Path.Combine(AppContext.BaseDirectory, ".tools", "ffmpeg", "bin", "ffmpeg.exe")
         ];
         foreach (string candidate in candidates)
             if (File.Exists(candidate)) return candidate;
-        for (DirectoryInfo? directory = new(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
-        {
-            string candidate = Path.Combine(directory.FullName, ".local", "ffmpeg.exe");
-            if (File.Exists(candidate)) return candidate;
-        }
+#if DEBUG
+        // 開発用の.local探索は配布版に含めない。カレントディレクトリは起動元次第で変わるため探さない。
+        if (FindDevelopmentExecutable(AppContext.BaseDirectory) is { } development) return development;
+#endif
         foreach (string entry in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator))
         {
             try
@@ -42,6 +40,21 @@ public sealed class FfmpegService
                 if (File.Exists(candidate)) return Path.GetFullPath(candidate);
             }
             catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 実行ファイルの親を遡り、最初に見つけたリポジトリ直下（tool.json のある場所）の .local/ffmpeg.exe だけを返す。
+    /// C:\ 直下などリポジトリ外の .local は、他の利用者が作成できるため探さない。
+    /// </summary>
+    public static string? FindDevelopmentExecutable(string startDirectory)
+    {
+        for (DirectoryInfo? directory = new(Path.GetFullPath(startDirectory)); directory is not null; directory = directory.Parent)
+        {
+            if (!File.Exists(Path.Combine(directory.FullName, "tool.json"))) continue;
+            string candidate = Path.Combine(directory.FullName, ".local", "ffmpeg.exe");
+            return File.Exists(candidate) ? candidate : null;
         }
         return null;
     }

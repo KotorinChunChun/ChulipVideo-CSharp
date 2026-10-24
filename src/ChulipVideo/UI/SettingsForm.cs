@@ -244,19 +244,9 @@ public sealed class SettingsForm : BrandedForm
         input.Focus();
     }
 
-    private static bool IsColor(string value, bool optional)
-    {
-        value = value.Trim();
-        if (value.Length == 0) return optional;
-        if (value.Length != 7 || value[0] != '#') return false;
-        return value.AsSpan(1).ToString().All(Uri.IsHexDigit);
-    }
+    private static bool IsColor(string value, bool optional) => ColorText.IsValid(value, optional);
 
-    private static Color ColorOf(string value, Color fallback)
-    {
-        try { return string.IsNullOrWhiteSpace(value) ? fallback : ColorTranslator.FromHtml(value); }
-        catch (ArgumentException) { return fallback; }
-    }
+    private static Color ColorOf(string value, Color fallback) => ColorText.Parse(value, fallback);
 
     private void PaintPreview(object? sender, PaintEventArgs e)
     {

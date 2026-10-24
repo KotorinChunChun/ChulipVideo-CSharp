@@ -397,10 +397,7 @@ public sealed class VideoCanvas : Control
     }
 
     private static int Snap(double value, int step) => (int)Math.Round(value / step) * step;
-    private static Color ParseColor(string value, Color fallback)
-    {
-        try { return ColorTranslator.FromHtml(value); } catch (ArgumentException) { return fallback; }
-    }
+    private static Color ParseColor(string value, Color fallback) => ColorText.Parse(value, fallback);
 
     protected override void Dispose(bool disposing)
     {

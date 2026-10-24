@@ -4,6 +4,7 @@ Console.WriteLine("初期モデル検証: 成功");
 ChulipVideo.Tests.CanvasTests.Run();
 ChulipVideo.Tests.EditingControlTests.Run();
 ChulipVideo.Tests.ManagementTests.Run(Path.Combine(args.Length >= 2 ? args[1] : Path.GetTempPath(), "chulip-management-tests"));
+ChulipVideo.Tests.SafetyTests.Run(Path.Combine(args.Length >= 2 ? args[1] : Path.GetTempPath(), "chulip-safety-tests"));
 if(args.Length>=2)
 {
     Directory.CreateDirectory(args[1]);

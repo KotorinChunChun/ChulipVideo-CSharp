@@ -4,4 +4,6 @@
 
 機能基盤: [v0.2.0 要求](history/v0.2.0/v0.2.0-req.md) / [実装計画・報告](history/v0.2.0/v0.2.0-imp.md) / [進捗](history/v0.2.0/v0.2.0-task.md)。
 
+調査: [コードレビュー・改善 2026-10-24](research/code-review-2026-10-24/report.md) / [セキュリティ診断 2026-10-15](research/security-audit-2026-10-15/report.md)。
+
 過去版: [v0.1.0 要求](history/v0.1.0/v0.1.0-req.md) / [実装・検証報告](history/v0.1.0/v0.1.0-imp.md)。

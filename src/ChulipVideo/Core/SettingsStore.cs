@@ -21,8 +21,8 @@ public sealed class SettingsStore(string? path = null)
             settings.Presets = (settings.Presets ?? []).Where(p=>p is not null && p.Width is >0 and <=16384 && p.Height is >0 and <=16384).ToList();
             settings.FfmpegPath ??= "";
             settings.LastVideoPath ??= "";
-            settings.CanvasColor ??= "#787878";
-            settings.CropColor ??= "#FF8C00";
+            settings.CanvasColor = ColorText.Normalize(settings.CanvasColor, "#787878");
+            settings.CropColor = ColorText.Normalize(settings.CropColor, "#FF8C00");
             settings.Overlay ??= new();
             NormalizeOverlay(settings.Overlay);
             return settings;
@@ -42,10 +42,13 @@ public sealed class SettingsStore(string? path = null)
         o.RippleDuration=FiniteClamp(o.RippleDuration,0.05,10);o.FadeDuration=FiniteClamp(o.FadeDuration,0.1,30);
         o.OffsetX=Math.Clamp(o.OffsetX,-8192,8192);o.OffsetY=Math.Clamp(o.OffsetY,-8192,8192);
         o.TextOffsetY=Math.Clamp(o.TextOffsetY,-100,100);o.PaddingY=Math.Clamp(o.PaddingY,0,100);
-        o.PointerColor??="#202020";o.PointerShape??="cursor";o.PointerFill??="";o.ClickShape??="circle";
-        o.LeftColor??="#FF4444";o.RightColor??="#4488FF";o.MiddleColor??="#44CC66";
-        o.FontFamily??="Yu Gothic UI";o.TextColor??="#FFFFFF";o.BackgroundColor??="#202020";
-        o.OutlineColor??="";o.Horizontal??="center";o.Vertical??="bottom";
+        o.PointerShape??="cursor";o.ClickShape??="circle";
+        o.FontFamily??="Yu Gothic UI";o.Horizontal??="center";o.Vertical??="bottom";
+        // 設定画面と同じ#RRGGBBだけを受け付ける。手編集等の不正値は既定色へ戻す。
+        o.PointerColor=ColorText.Normalize(o.PointerColor,"#202020");o.PointerFill=ColorText.Normalize(o.PointerFill,"",true);
+        o.LeftColor=ColorText.Normalize(o.LeftColor,"#FF4444");o.RightColor=ColorText.Normalize(o.RightColor,"#4488FF");o.MiddleColor=ColorText.Normalize(o.MiddleColor,"#44CC66");
+        o.TextColor=ColorText.Normalize(o.TextColor,"#FFFFFF");o.BackgroundColor=ColorText.Normalize(o.BackgroundColor,"#202020",true);
+        o.OutlineColor=ColorText.Normalize(o.OutlineColor,"",true);
     }
 
     public void Save(AppSettings settings)
