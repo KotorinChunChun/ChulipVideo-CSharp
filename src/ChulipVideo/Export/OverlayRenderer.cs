@@ -145,12 +145,7 @@ public static class OverlayRenderer
         "L-Click" => options.LeftColor, "R-Click" => options.RightColor, "M-Click" => options.MiddleColor, _ => "#CC44CC"
     }, Color.Red);
 
-    private static Color ParseColor(string value, Color fallback, bool transparent = false)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return transparent ? Color.Empty : fallback;
-        try { return ColorTranslator.FromHtml(value); }
-        catch (ArgumentException) { return fallback; }
-    }
+    private static Color ParseColor(string value, Color fallback, bool transparent = false) => ColorText.Parse(value, fallback, transparent);
 
     private static void Shape(Graphics graphics, string shape, float x, float y, float radius, Color outline, Color fill, float width, float rotation)
     {

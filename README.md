@@ -27,7 +27,7 @@ cd C:\develop\KotorinToys\tools\ChulipVideo
 ./dev/scripts/start.ps1
 ```
 
-この開発環境では移植元にあったFFmpegを`.local/ffmpeg.exe`へ複製しています。Python本体への実行時依存はありません。別環境では「設定」でFFmpeg実行ファイルを指定するか、`CHULIPVIDEO_FFMPEG`環境変数にパスを設定してください。
+この開発環境では移植元にあったFFmpegを`.local/ffmpeg.exe`へ複製しています。この場所はDebugビルドだけが自動検索し、配布版は参照しません。Python本体への実行時依存はありません。別環境では「設定」でFFmpeg実行ファイルを指定するか、`CHULIPVIDEO_FFMPEG`環境変数にパスを設定してください。
 
 [操作・設定・開発手順](docs/guide.md) / [配布ZIPの作成手順](docs/release.md) / [v0.2.0 要求](dev/history/v0.2.0/v0.2.0-req.md) / [実装・検証報告](dev/history/v0.2.0/v0.2.0-imp.md)
 

@@ -43,7 +43,8 @@ public sealed partial class MainForm : BrandedForm
     private readonly List<CropRect> history=[];
     private int historyIndex=-1, seekVersion;
     private bool syncing,rendering,playing,loading,exporting,closing,shutdownComplete;
-    internal string? ManagementStopBlockReason => exporting || loading || rendering || closing ? "読込・描画・書き出し・終了処理中のため停止できません。" : null;
+    // プレビュー描画は終了処理で安全に取り消せるため、再生中でも停止を受け付ける。
+    internal string? ManagementStopBlockReason => exporting || loading || closing ? "読込・書き出し・終了処理中のため停止できません。" : null;
     private double currentTime,rangeStart,rangeEnd,playOrigin,previewTime;
     private Task? exportTask;
 
@@ -269,16 +270,18 @@ public sealed partial class MainForm : BrandedForm
     private async Task SaveImageAsync()
     {
         if(current is null)return;StopPlaying();
-        using var dialog=new SaveFileDialog{Filter="PNG画像|*.png",FileName=$"{Path.GetFileNameWithoutExtension(current.Path)}_{currentTime:0.000}.png",InitialDirectory=Path.GetDirectoryName(current.Path),OverwritePrompt=true};
+        using var dialog=SaveDialog("PNG画像|*.png",$"{Path.GetFileNameWithoutExtension(current.Path)}_{currentTime:0.000}.png",Path.GetDirectoryName(current.Path));
         if(dialog.ShowDialog(this)!=DialogResult.OK)return;
         if(File.Exists(dialog.FileName)){MessageBox.Show(this,"既存ファイルを保護するため、新しい名前を指定してください。",WindowTitle.Create("保存先"));return;}
         using var image=await CurrentImageAsync();ExportService.SavePng(image,dialog.FileName,settings.PngCompression);Status("画像を保存しました: "+dialog.FileName);
     }
+    // 既存ファイルは常に保護するため、上書き確認は出さずに選択後に別名を求める。
+    private static SaveFileDialog SaveDialog(string filter,string fileName,string? directory)=>new(){Filter=filter,FileName=fileName,InitialDirectory=directory??"",OverwritePrompt=false};
     private void BeginExport(ExportKind kind)
     {
         if(current is null||media is null||exporting||loading)return;StopPlaying();string outputPath;
         if(kind==ExportKind.PngSequence){using var dialog=new FolderBrowserDialog{Description="PNG連番を保存する親フォルダー",UseDescriptionForTitle=true};if(dialog.ShowDialog(this)!=DialogResult.OK)return;outputPath=Path.Combine(dialog.SelectedPath,$"{Path.GetFileNameWithoutExtension(current.Path)}_crops_{DateTime.Now:yyyyMMdd_HHmmss_fff}");}
-        else{var ext=kind==ExportKind.Mp4?"mp4":"gif";using var dialog=new SaveFileDialog{Filter=$"{ext.ToUpperInvariant()}|*.{ext}",FileName=$"{Path.GetFileNameWithoutExtension(current.Path)}_clip_{DateTime.Now:HHmmss}.{ext}",OverwritePrompt=true};if(dialog.ShowDialog(this)!=DialogResult.OK)return;if(File.Exists(dialog.FileName)){MessageBox.Show(this,"既存ファイルを保護するため、新しい名前を指定してください。",WindowTitle.Create("保存先"));return;}outputPath=dialog.FileName;}
+        else{var ext=kind==ExportKind.Mp4?"mp4":"gif";using var dialog=SaveDialog($"{ext.ToUpperInvariant()}|*.{ext}",$"{Path.GetFileNameWithoutExtension(current.Path)}_clip_{DateTime.Now:HHmmss}.{ext}",null);if(dialog.ShowDialog(this)!=DialogResult.OK)return;if(File.Exists(dialog.FileName)){MessageBox.Show(this,"既存ファイルを保護するため、新しい名前を指定してください。",WindowTitle.Create("保存先"));return;}outputPath=dialog.FileName;}
         var snapshot=System.Text.Json.JsonSerializer.Deserialize<AppSettings>(System.Text.Json.JsonSerializer.Serialize(settings))!;
         var request=new ExportRequest(current,canvas.Crop,rangeStart,rangeEnd,outputPath,kind,snapshot);
         exportCancel=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);exporting=true;SetBusy(true);cancel.Enabled=true;progress.Value=0;
@@ -323,13 +326,17 @@ public sealed partial class MainForm : BrandedForm
     protected override async void OnFormClosing(FormClosingEventArgs e)
     {
         if(shutdownComplete){base.OnFormClosing(e);return;}
-        e.Cancel=true;if(closing)return;closing=true;StopPlaying();timer.Stop();lifetime.Cancel();mediaLifetime.Cancel();exportCancel?.Cancel();
+        // Windowsの終了時は取り消さない。取消要求でFFmpegを止め、設定だけ同期保存して閉じる。
+        if(e.CloseReason==CloseReason.WindowsShutDown){BeginClosing();CompleteClosing();base.OnFormClosing(e);return;}
+        e.Cancel=true;if(closing)return;BeginClosing();
         try{if(exportTask is not null)await exportTask;if(preview is not null)await preview.DisposeAsync();}
         catch(Exception ex){Debug.WriteLine(ex);}
-        finally
-        {
-            if(WindowState==FormWindowState.Normal){settings.WindowWidth=Width;settings.WindowHeight=Height;}TrySaveApp();
-            rawPreview?.Dispose();rawPreview=null;timer.Dispose();tips.Dispose();shutdownComplete=true;Close();
-        }
+        finally{if(!shutdownComplete){CompleteClosing();Close();}}
+    }
+    private void BeginClosing(){closing=true;StopPlaying();timer.Stop();lifetime.Cancel();mediaLifetime.Cancel();exportCancel?.Cancel();}
+    private void CompleteClosing()
+    {
+        if(WindowState==FormWindowState.Normal){settings.WindowWidth=Width;settings.WindowHeight=Height;}TrySaveApp();
+        rawPreview?.Dispose();rawPreview=null;timer.Dispose();tips.Dispose();shutdownComplete=true;
     }
 }
