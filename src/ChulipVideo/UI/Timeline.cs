@@ -7,6 +7,8 @@ public sealed class Timeline : Control
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] public double Start {get;set;}
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] public double End {get;set;}
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] public double Position {get;set;}
+    /// <summary>下端に帯で示すマスクの時間帯（開始・終了の秒）。</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] public IReadOnlyList<(double Start, double End)> MaskRanges {get;set;} = [];
     public event Action<double>? Seek;
     public event Action<double>? StartChanged;
     public event Action<double>? EndChanged;
@@ -22,6 +24,8 @@ public sealed class Timeline : Control
         g.DrawLine(gray,14,20,Width-14,20); g.DrawLine(selected,X(Start),20,X(End),20);
         g.FillPolygon(Brushes.ForestGreen,[new PointF(X(Start)-6,4),new PointF(X(Start)+6,4),new PointF(X(Start),15)]);
         g.FillPolygon(Brushes.IndianRed,[new PointF(X(End)-6,36),new PointF(X(End)+6,36),new PointF(X(End),25)]);
+        using(var mask=new SolidBrush(Color.FromArgb(0,160,190)))
+            foreach(var (s,t) in MaskRanges) g.FillRectangle(mask,X(s),Height-3,Math.Max(2,X(t)-X(s)),3);
         g.FillEllipse(Brushes.White,X(Position)-6,14,12,12);
         g.DrawEllipse(Pens.Black,X(Position)-6,14,12,12);
     }

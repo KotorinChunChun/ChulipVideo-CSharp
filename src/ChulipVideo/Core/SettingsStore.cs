@@ -93,6 +93,7 @@ public sealed class SettingsStore(string? path = null)
             settings.Start = FiniteClamp(settings.Start,0,media.LastFrameTime);
             settings.End = FiniteClamp(settings.End,Math.Min(media.Duration,settings.Start+1/media.Fps),media.Duration);
             settings.Position = FiniteClamp(settings.Position,0,media.LastFrameTime);
+            settings.Masks = NormalizeMasks(settings.Masks,media);
             return settings;
         }
         catch(Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or InvalidOperationException or KeyNotFoundException or FormatException or OverflowException)
@@ -100,6 +101,27 @@ public sealed class SettingsStore(string? path = null)
             warning = $"動画設定を読み込めませんでした: {ex.Message}";
             return new() { Crop = CropRect.Full(media), End = media.Duration };
         }
+    }
+
+    public static List<MaskRegion> NormalizeMasks(IEnumerable<MaskRegion?>? masks, MediaInfo media)
+    {
+        var result = new List<MaskRegion>();
+        foreach (var mask in masks ?? [])
+        {
+            if (mask is null) continue;
+            mask.Id = string.IsNullOrWhiteSpace(mask.Id) ? Guid.NewGuid().ToString("N") : mask.Id;
+            // マスクは映像を隠すためのものなので、動画の外へははみ出させない。
+            mask.Rect = mask.Rect.Clamp(media.Width,media.Height,false);
+            mask.Start = FiniteClamp(mask.Start,0,media.Duration);
+            mask.End = FiniteClamp(mask.End,mask.Start,media.Duration);
+            if (mask.End <= mask.Start) mask.End = Math.Min(media.Duration, mask.Start + 1 / media.Fps);
+            if (!Enum.IsDefined(mask.Mode)) mask.Mode = MaskMode.Mosaic;
+            mask.Strength = Math.Clamp(mask.Strength,2,256);
+            mask.Color = ColorText.Normalize(mask.Color,"#000000");
+            mask.Note ??= ""; mask.Source = mask.Source is "Suggested" ? "Suggested" : "Manual";
+            result.Add(mask);
+        }
+        return result;
     }
 
     private static double FiniteClamp(double x,double min,double max) => Math.Clamp(double.IsFinite(x)?x:min,min,Math.Max(min,max));

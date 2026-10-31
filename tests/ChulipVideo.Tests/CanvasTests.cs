@@ -52,11 +52,11 @@ public static class CanvasTests
 
         canvas.Crop = new CropRect(200, 100, 400, 200);
         Mouse(canvas, "OnMouseDown", MouseButtons.Left, 316, 166);
-        var ratio = (CropRect)Call(canvas, "ResizeCrop", 100, 20, true, false)!;
+        var ratio = (CropRect)Call(canvas, "ResizeCrop", 100, 20, true, false, canvas.AllowOutside)!;
         Equal(new CropRect(200, 100, 500, 250), ratio, "比率固定リサイズ");
-        var center = (CropRect)Call(canvas, "ResizeCrop", 100, 20, false, true)!;
+        var center = (CropRect)Call(canvas, "ResizeCrop", 100, 20, false, true, canvas.AllowOutside)!;
         Equal(new CropRect(100, 80, 600, 240), center, "中心固定リサイズ");
-        var ratioCenter = (CropRect)Call(canvas, "ResizeCrop", 100, 20, true, true)!;
+        var ratioCenter = (CropRect)Call(canvas, "ResizeCrop", 100, 20, true, true, canvas.AllowOutside)!;
         Equal(new CropRect(100, 50, 600, 300), ratioCenter, "比率と中心を同時固定");
         Mouse(canvas, "OnMouseUp", MouseButtons.Left, 316, 166);
 

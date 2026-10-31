@@ -76,9 +76,10 @@ public static class StepDetector
     }
 
     /// <summary>ステップの画像を作る。注釈は手順書の書き出し時に重ねる。</summary>
-    public static async Task<Bitmap> RenderImageAsync(FfmpegService service, MediaInfo media, EventLog events, CropRect crop, AppSettings settings, double time, CancellationToken ct = default)
+    public static async Task<Bitmap> RenderImageAsync(FfmpegService service, MediaInfo media, EventLog events, CropRect crop, AppSettings settings, double time,
+        IReadOnlyList<MaskRegion>? masks = null, CancellationToken ct = default)
     {
         using Bitmap frame = await service.ReadFrameAsync(media, time, ct).ConfigureAwait(false);
-        return FrameComposer.Compose(frame, new(crop, time, events, settings.Overlay) { DrawOverlay = false });
+        return FrameComposer.Compose(frame, new(crop, time, events, settings.Overlay) { DrawOverlay = false, Masks = masks ?? [] });
     }
 }

@@ -7,20 +7,32 @@ public sealed record RenderContext(CropRect Crop, double Time, EventLog Events, 
 {
     /// <summary>falseならポインター・クリック・字幕を描かない（静止判定用の素の画像）。</summary>
     public bool DrawOverlay { get; init; } = true;
+    /// <summary>①で描くマスク。DrawOverlayに関係なく常に適用する。</summary>
+    public IReadOnlyList<MaskRegion> Masks { get; init; } = [];
 }
 
 /// <summary>
-/// プレビュー・コピー・PNG・連番・MP4・GIFが共通に通る合成処理。
+/// プレビュー・コピー・PNG・連番・MP4・GIF・手順書画像が共通に通る合成処理。
 /// 段階: ①マスク → ②表示範囲（クロップ・ズーム） → ③ポインター・クリック → ④字幕 → ⑤注釈。
 /// 出力側はOverlayRendererを直接呼ばず、必ずここを通す（マスクの適用漏れを防ぐため）。
 /// </summary>
 public static class FrameComposer
 {
     /// <summary>出力用。クロップの幅・高さの画像を作る。</summary>
-    public static Bitmap Compose(Bitmap frame, RenderContext context) =>
-        OverlayRenderer.Render(frame, context.Crop, context.Time, context.Events, context.Options, context.DrawOverlay);
+    public static Bitmap Compose(Bitmap frame, RenderContext context)
+    {
+        using Bitmap? masked = Masked(frame, context, 1, 1);
+        return OverlayRenderer.Render(masked ?? frame, context.Crop, context.Time, context.Events, context.Options, context.DrawOverlay);
+    }
 
     /// <summary>プレビュー用。縮小フレームの全体へ、元動画との比率で演出を重ねる。</summary>
-    public static Bitmap ComposePreview(Bitmap frame, MediaInfo media, RenderContext context) =>
-        OverlayRenderer.RenderPreview(frame, media, context.Time, context.Events, context.Options, context.Crop);
+    public static Bitmap ComposePreview(Bitmap frame, MediaInfo media, RenderContext context)
+    {
+        using Bitmap? masked = Masked(frame, context, (float)frame.Width / media.Width, (float)frame.Height / media.Height);
+        return OverlayRenderer.RenderPreview(masked ?? frame, media, context.Time, context.Events, context.Options, context.Crop);
+    }
+
+    // 元フレームはプレビューで使い回すため書き換えず、マスクがあるときだけ複製して描く。
+    private static Bitmap? Masked(Bitmap frame, RenderContext context, float scaleX, float scaleY) =>
+        MaskRenderer.HasActive(context.Masks, context.Time) ? MaskRenderer.Apply(frame, context.Masks, context.Time, scaleX, scaleY) : null;
 }

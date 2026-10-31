@@ -11,7 +11,8 @@ internal static class SafetyTests
 {
     public static void Run(string directory)
     {
-        string root = Path.Combine(directory, "safety-" + Guid.NewGuid().ToString("N"));
+        // 8.3形式の短いパスはGetFullPathで長い形式へ展開されるため、比較の前にそろえておく。
+        string root = Path.GetFullPath(Path.Combine(directory, "safety-" + Guid.NewGuid().ToString("N")));
         Directory.CreateDirectory(root);
         try
         {

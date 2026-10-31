@@ -102,9 +102,10 @@ public sealed class ExportService(FfmpegService media)
         int index = 0, saved = 0;
         try
         {
-            current = await ReadAsync(reader, request.Crop, ct).ConfigureAwait(false);
+            int read = 0;
+            current = await ReadAsync(reader, request, read++, ct).ConfigureAwait(false);
             if (current is null) throw new IOException("指定区間からフレームを読み取れませんでした。");
-            next = await ReadAsync(reader, request.Crop, ct).ConfigureAwait(false);
+            next = await ReadAsync(reader, request, read++, ct).ConfigureAwait(false);
             while (current is not null)
             {
                 ct.ThrowIfCancellationRequested();
@@ -115,7 +116,7 @@ public sealed class ExportService(FfmpegService media)
                 if (stable && !duplicate)
                 {
                     double seconds = request.Media.FrameTime(request.Start + index / request.Media.Fps);
-                    using Bitmap rendered = FrameComposer.Compose(current.Frame, new(request.Crop, seconds, events, request.Settings.Overlay));
+                    using Bitmap rendered = FrameComposer.Compose(current.Frame, new(request.Crop, seconds, events, request.Settings.Overlay) { Masks = request.Masks });
                     string name = FormattableString.Invariant($"frame_{index:D8}_{seconds:F3}s.png");
                     SavePng(rendered, Path.Combine(output, name), request.Settings.PngCompression);
                     lastSaved = current.Pixels;
@@ -125,7 +126,7 @@ public sealed class ExportService(FfmpegService media)
                 current.Dispose(); current = next; next = null;
                 index++;
                 progress?.Report(new(Math.Min(index, total), total, $"PNG確認 {index} / {total}、保存 {saved} 枚"));
-                if (current is not null) next = await ReadAsync(reader, request.Crop, ct).ConfigureAwait(false);
+                if (current is not null) next = await ReadAsync(reader, request, read++, ct).ConfigureAwait(false);
             }
             return saved;
         }
@@ -160,7 +161,7 @@ public sealed class ExportService(FfmpegService media)
                     using Bitmap? frame = await reader.ReadAsync(ct).ConfigureAwait(false);
                     if (frame is null) break;
                     using Bitmap rendered = FrameComposer.Compose(frame, new(request.Crop, request.Media.FrameTime(request.Start + count / request.Media.Fps), events,
-                        request.Settings.Overlay) { DrawOverlay = request.Settings.BurnOverlay });
+                        request.Settings.Overlay) { DrawOverlay = request.Settings.BurnOverlay, Masks = request.Masks });
                     byte[] pixels = BitmapPixels.Bgra(rendered);
                     await encoder.StandardInput.BaseStream.WriteAsync(pixels, ct).ConfigureAwait(false);
                     count++;
@@ -234,13 +235,15 @@ public sealed class ExportService(FfmpegService media)
         catch (System.ComponentModel.Win32Exception) { }
     }
 
-    private static async Task<FrameData?> ReadAsync(FrameReader reader, CropRect crop, CancellationToken ct)
+    // 静止・重複の比較は、マスク後・演出前の見えている画像で行う。
+    private static async Task<FrameData?> ReadAsync(FrameReader reader, ExportRequest request, int index, CancellationToken ct)
     {
         Bitmap? frame = await reader.ReadAsync(ct).ConfigureAwait(false);
         if (frame is null) return null;
         try
         {
-            using Bitmap raw = FrameComposer.Compose(frame, new(crop, 0, EventLog.Empty, new()) { DrawOverlay = false });
+            double seconds = request.Media.FrameTime(request.Start + index / request.Media.Fps);
+            using Bitmap raw = FrameComposer.Compose(frame, new(request.Crop, seconds, EventLog.Empty, new()) { DrawOverlay = false, Masks = request.Masks });
             return new(frame, BitmapPixels.Bgra(raw));
         }
         catch { frame.Dispose(); throw; }

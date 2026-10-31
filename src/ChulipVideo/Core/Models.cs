@@ -32,6 +32,29 @@ public sealed record VideoSettings
     public double End { get; set; }
     public double Position { get; set; }
     public bool AllowOutside { get; set; }
+    public List<MaskRegion> Masks { get; set; } = [];
+}
+
+[System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<MaskMode>))]
+public enum MaskMode { Mosaic, Blur, Fill }
+
+/// <summary>範囲と時間帯を指定して映像を隠すマスク。座標は元動画のピクセル、時間は開始を含み終了を含まない。</summary>
+public sealed record MaskRegion
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public bool Enabled { get; set; } = true;
+    public CropRect Rect { get; set; }
+    public double Start { get; set; }
+    public double End { get; set; }
+    public MaskMode Mode { get; set; } = MaskMode.Mosaic;
+    /// <summary>モザイクのブロック、ぼかしの半径（元動画のピクセル）。</summary>
+    public int Strength { get; set; } = 16;
+    /// <summary>塗りつぶしの色（#RRGGBB）。</summary>
+    public string Color { get; set; } = "#000000";
+    public string Note { get; set; } = "";
+    /// <summary>Manual、またはOCRの候補を表すSuggested（承認されるまで無効）。</summary>
+    public string Source { get; set; } = "Manual";
+    public bool IsActive(double seconds) => Enabled && seconds >= Start && seconds < End && Rect.Width > 0 && Rect.Height > 0;
 }
 
 public sealed record ResolutionPreset(string Name, int Width, int Height)
@@ -117,6 +140,9 @@ public sealed record AppSettings
 }
 
 public enum ExportKind { PngSequence, Mp4, Gif }
-public sealed record ExportRequest(MediaInfo Media, CropRect Crop, double Start, double End, string OutputPath, ExportKind Kind, AppSettings Settings);
+public sealed record ExportRequest(MediaInfo Media, CropRect Crop, double Start, double End, string OutputPath, ExportKind Kind, AppSettings Settings)
+{
+    public IReadOnlyList<MaskRegion> Masks { get; init; } = [];
+}
 public sealed record ExportProgress(int Completed, int Total, string Message);
 public sealed record ExportResult(string OutputPath, int FrameCount);

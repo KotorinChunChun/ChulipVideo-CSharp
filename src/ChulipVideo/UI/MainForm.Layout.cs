@@ -69,6 +69,10 @@ public sealed partial class MainForm
             button.MinimumSize = new Size(button.Text == "?" ? 28 : 42, 30);
             actions.Controls.Add(button);
         }
+        maskEdit.Margin = new Padding(2, 1, 2, 1);
+        busyControls.Add(maskEdit);
+        actions.Controls.Add(maskEdit);
+        actions.Controls.SetChildIndex(maskEdit, 3); // 「手順」の隣
         toolbar.Controls.Add(actions, 2, 0);
         info.Name = "mediaInfo";
         toolbar.Controls.Add(info, 3, 0);

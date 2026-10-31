@@ -21,8 +21,19 @@ public sealed class VideoCanvas : Control
     private int edgeX, edgeY;
     private MouseButtons dragButton;
     private Point? hoverPosition;
+    private bool maskMode;
+    private List<CropRect> maskRects = [];
+    private int selectedMask = -1;
+    private CropRect? draft;
 
     private enum DragMode { None, Create, Move, Resize, Pan }
+
+    /// <summary>マスクの矩形の編集通知。Indexは<see cref="MaskRects"/>の位置、-1は新規作成。</summary>
+    public sealed class MaskEditEventArgs(int index, CropRect rect) : EventArgs
+    {
+        public int Index { get; } = index;
+        public CropRect Rect { get; } = rect;
+    }
 
     public VideoCanvas()
     {
@@ -94,6 +105,46 @@ public sealed class VideoCanvas : Control
     public event EventHandler? CropChanged;
     public event EventHandler? CropCommitted;
     public event EventHandler? ViewChanged;
+    /// <summary>ドラッグ中のマスクの移動・変形。</summary>
+    public event EventHandler<MaskEditEventArgs>? MaskEdited;
+    /// <summary>ドラッグを終えたマスクの確定（作成はIndex=-1）。</summary>
+    public event EventHandler<MaskEditEventArgs>? MaskCommitted;
+    public event EventHandler? MaskSelectionChanged;
+
+    /// <summary>trueのとき、左ドラッグで切り出し枠ではなくマスクを作成・移動・変形する。</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool MaskMode
+    {
+        get => maskMode;
+        set { if (maskMode == value) return; CancelDrag(); maskMode = value; Invalidate(); }
+    }
+
+    /// <summary>現在時刻で表示するマスクの矩形（元動画のピクセル）。</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public IReadOnlyList<CropRect> MaskRects
+    {
+        get => maskRects;
+        set
+        {
+            if (drag != DragMode.None && maskMode) return; // 操作中の矩形を外から上書きしない
+            maskRects = value.ToList();
+            if (selectedMask >= maskRects.Count) selectedMask = -1;
+            Invalidate();
+        }
+    }
+
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public int SelectedMask
+    {
+        get => selectedMask;
+        set
+        {
+            int next = value >= 0 && value < maskRects.Count ? value : -1;
+            if (next == selectedMask) return;
+            selectedMask = next; Invalidate();
+            MaskSelectionChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     private bool HasVideo => videoSize.Width > 0 && videoSize.Height > 0;
     private float HandleRadius => 4 * DeviceDpi / 96f;
@@ -156,12 +207,13 @@ public sealed class VideoCanvas : Control
         using var framePen = new Pen(Color.FromArgb(130, Color.White));
         g.DrawRectangle(framePen, imageRect.X, imageRect.Y, imageRect.Width, imageRect.Height);
         var color = ParseColor(cropColor, Color.DarkOrange);
-        bool active = Focused || drag is DragMode.Create or DragMode.Move or DragMode.Resize;
+        bool active = !maskMode && (Focused || drag is DragMode.Create or DragMode.Move or DragMode.Resize);
         // 独自の保存色は維持し、既定配色だけ原型と同じ赤で注目状態を示す。
-        if ((active || IsCropHovered) && color.ToArgb() == Color.DarkOrange.ToArgb()) color = Color.Red;
+        if ((active || !maskMode && IsCropHovered) && color.ToArgb() == Color.DarkOrange.ToArgb()) color = Color.Red;
         using var cropPen = new Pen(color, 2) { DashStyle = active ? DashStyle.Solid : DashStyle.Dash };
         g.DrawRectangle(cropPen, cropRect.X, cropRect.Y, cropRect.Width, cropRect.Height);
-        if (!SizeLocked)
+        if (maskMode) PaintMasks(g);
+        else if (!SizeLocked)
         {
             using var handlePen = new Pen(color);
             foreach (var (_, _, point) in Handles(cropRect))
@@ -178,6 +230,82 @@ public sealed class VideoCanvas : Control
         TextRenderer.DrawText(g, caption, Font, new Point(lx, ly), Color.White, Color.FromArgb(32, 36, 43));
     }
 
+    private void PaintMasks(Graphics g)
+    {
+        using var pen = new Pen(Color.Cyan, 2) { DashStyle = DashStyle.Dash };
+        using var selectedPen = new Pen(Color.Cyan, 2);
+        for (int i = 0; i < maskRects.Count; i++)
+        {
+            var rect = ToClient(maskRects[i]);
+            g.DrawRectangle(i == selectedMask ? selectedPen : pen, rect.X, rect.Y, rect.Width, rect.Height);
+            TextRenderer.DrawText(g, $"マスク{i + 1}", Font, new Point((int)rect.X + 2, (int)rect.Y + 2), Color.Cyan, Color.FromArgb(32, 36, 43));
+        }
+        if (selectedMask >= 0)
+            foreach (var (_, _, point) in Handles(ToClient(maskRects[selectedMask])))
+            {
+                var r = new RectangleF(point.X - HandleRadius, point.Y - HandleRadius, HandleRadius * 2, HandleRadius * 2);
+                g.FillRectangle(Brushes.White, r);
+                g.DrawRectangle(selectedPen, r.X, r.Y, r.Width, r.Height);
+            }
+        if (draft is CropRect created)
+        {
+            var rect = ToClient(created);
+            using var draftPen = new Pen(Color.Yellow, 2) { DashStyle = DashStyle.Dash };
+            g.DrawRectangle(draftPen, rect.X, rect.Y, rect.Width, rect.Height);
+        }
+    }
+
+    private int HitMask(Point location)
+    {
+        // 上に描いた（後の）マスクを優先する。
+        for (int i = maskRects.Count - 1; i >= 0; i--) if (ToClient(maskRects[i]).Contains(location)) return i;
+        return -1;
+    }
+
+    private void MaskMouseDown(MouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Left) return;
+        (edgeX, edgeY) = selectedMask >= 0 ? HitHandle(e.Location, ToClient(maskRects[selectedMask])) : (0, 0);
+        if (selectedMask >= 0 && (edgeX != 0 || edgeY != 0)) { drag = DragMode.Resize; cropStart = maskRects[selectedMask]; }
+        else if (HitMask(e.Location) is var hit and >= 0) { SelectedMask = hit; drag = DragMode.Move; cropStart = maskRects[hit]; }
+        else { SelectedMask = -1; drag = DragMode.Create; draft = null; }
+    }
+
+    private void MaskMouseMove(int dx, int dy, bool shift, bool center, int step)
+    {
+        switch (drag)
+        {
+            case DragMode.Move when selectedMask >= 0:
+                if (shift) { if (Math.Abs(dx) >= Math.Abs(dy)) dy = 0; else dx = 0; }
+                SetMaskRect((cropStart with { X = cropStart.X + dx, Y = cropStart.Y + dy }).Clamp(videoSize.Width, videoSize.Height, false));
+                break;
+            case DragMode.Resize when selectedMask >= 0:
+                SetMaskRect(ResizeCrop(dx, dy, shift, center, outside: false));
+                break;
+            case DragMode.Create:
+                double x1 = Math.Clamp(Snap(videoStart.X, step), 0, videoSize.Width), y1 = Math.Clamp(Snap(videoStart.Y, step), 0, videoSize.Height);
+                double x2 = Math.Clamp(x1 + dx, 0, videoSize.Width), y2 = Math.Clamp(y1 + dy, 0, videoSize.Height);
+                draft = new((int)Math.Min(x1, x2), (int)Math.Min(y1, y2), Math.Max(1, (int)Math.Abs(x2 - x1)), Math.Max(1, (int)Math.Abs(y2 - y1)));
+                Invalidate();
+                break;
+        }
+    }
+
+    private void SetMaskRect(CropRect rect)
+    {
+        if (maskRects[selectedMask] == rect) return;
+        maskRects[selectedMask] = rect;
+        Invalidate();
+        MaskEdited?.Invoke(this, new(selectedMask, rect));
+    }
+
+    private void CancelDrag()
+    {
+        if (drag == DragMode.None) return;
+        if (maskMode && drag is DragMode.Move or DragMode.Resize && selectedMask >= 0) SetMaskRect(cropStart);
+        draft = null; drag = DragMode.None; Capture = false; Invalidate();
+    }
+
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
@@ -188,6 +316,7 @@ public sealed class VideoCanvas : Control
         cropStart = crop;
         panStart = pan;
         dragButton = e.Button;
+        if (maskMode && e.Button != MouseButtons.Middle) { MaskMouseDown(e); if (drag != DragMode.None) Capture = true; return; }
         if (e.Button == MouseButtons.Middle) drag = DragMode.Pan;
         else if (e.Button == MouseButtons.Right && !MoveLocked) drag = DragMode.Move;
         else if (e.Button == MouseButtons.Left)
@@ -219,6 +348,7 @@ public sealed class VideoCanvas : Control
         bool shift = ModifierKeys.HasFlag(Keys.Shift), center = ModifierKeys.HasFlag(Keys.Control);
         int step = ModifierKeys.HasFlag(Keys.Alt) ? 10 : 1;
         int dx = Snap(position.X - videoStart.X, step), dy = Snap(position.Y - videoStart.Y, step);
+        if (maskMode) { MaskMouseMove(dx, dy, shift, center, step); return; }
         switch (drag)
         {
             case DragMode.Move:
@@ -242,7 +372,7 @@ public sealed class VideoCanvas : Control
                     Math.Max(1, (int)Math.Abs(x2 - x1)), Math.Max(1, (int)Math.Abs(y2 - y1)));
                 break;
             case DragMode.Resize:
-                Crop = ResizeCrop(dx, dy, shift, center);
+                Crop = ResizeCrop(dx, dy, shift, center, allowOutside);
                 break;
         }
     }
@@ -277,7 +407,8 @@ public sealed class VideoCanvas : Control
         Invalidate();
     }
 
-    private CropRect ResizeCrop(int dx, int dy, bool keepRatio, bool centered)
+    /// <summary>ドラッグ開始時の矩形（cropStart）を、つかんだ辺・角（edgeX/edgeY）に沿って変形する。</summary>
+    private CropRect ResizeCrop(int dx, int dy, bool keepRatio, bool centered, bool outside)
     {
         double w = Math.Max(1, cropStart.Width + dx * edgeX * (centered ? 2 : 1));
         double h = Math.Max(1, cropStart.Height + dy * edgeY * (centered ? 2 : 1));
@@ -289,7 +420,7 @@ public sealed class VideoCanvas : Control
         }
         double cx = cropStart.X + cropStart.Width / 2d, cy = cropStart.Y + cropStart.Height / 2d;
         double maxW = 16384, maxH = 16384;
-        if (!allowOutside)
+        if (!outside)
         {
             maxW = centered || edgeX == 0 ? Math.Min(cx, videoSize.Width - cx) * 2 :
                 edgeX < 0 ? cropStart.X + cropStart.Width : videoSize.Width - cropStart.X;
@@ -305,7 +436,7 @@ public sealed class VideoCanvas : Control
         int width = Math.Max(1, (int)Math.Round(w)), height = Math.Max(1, (int)Math.Round(h));
         int x = (int)Math.Round(centered || edgeX == 0 ? cx - width / 2d : edgeX < 0 ? cropStart.X + cropStart.Width - width : cropStart.X);
         int y = (int)Math.Round(centered || edgeY == 0 ? cy - height / 2d : edgeY < 0 ? cropStart.Y + cropStart.Height - height : cropStart.Y);
-        return new CropRect(x, y, width, height).Clamp(videoSize.Width, videoSize.Height, allowOutside);
+        return new CropRect(x, y, width, height).Clamp(videoSize.Width, videoSize.Height, outside);
     }
 
     protected override void OnMouseUp(MouseEventArgs e)
@@ -323,15 +454,34 @@ public sealed class VideoCanvas : Control
     private void CompleteDrag()
     {
         var previous = drag;
+        var created = draft;
         drag = DragMode.None;
+        draft = null;
+        // Capture=falseはOnMouseCaptureChangedから再びここを呼ぶため、状態は先に退避・初期化しておく。
         Capture = false;
+        if (maskMode)
+        {
+            // 小さすぎる作成は、クリックの誤操作として捨てる。
+            if (previous == DragMode.Create && created is CropRect rect && rect.Width >= 4 && rect.Height >= 4)
+                MaskCommitted?.Invoke(this, new(-1, rect));
+            else if (previous is DragMode.Move or DragMode.Resize && selectedMask >= 0 && maskRects[selectedMask] != cropStart)
+                MaskCommitted?.Invoke(this, new(selectedMask, maskRects[selectedMask]));
+            Invalidate();
+            return;
+        }
         if (previous is not DragMode.None and not DragMode.Pan && crop != cropStart)
             CropCommitted?.Invoke(this, EventArgs.Empty);
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        if (e.KeyCode == Keys.Escape && drag != DragMode.None)
+        if (e.KeyCode == Keys.Escape && drag != DragMode.None && maskMode && drag != DragMode.Pan)
+        {
+            CancelDrag();
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+        }
+        else if (e.KeyCode == Keys.Escape && drag != DragMode.None)
         {
             var previous = drag;
             drag = DragMode.None;
@@ -366,10 +516,12 @@ public sealed class VideoCanvas : Control
         if (e.Button == MouseButtons.Middle) { drag = DragMode.None; Capture = false; ResetView(); }
     }
 
-    private (int X, int Y) HitHandle(Point location)
+    private (int X, int Y) HitHandle(Point location) => HitHandle(location, ToClient(crop));
+
+    private (int X, int Y) HitHandle(Point location, RectangleF rect)
     {
         float radius = HandleRadius + 4;
-        foreach (var (x, y, point) in Handles(ToClient(crop)))
+        foreach (var (x, y, point) in Handles(rect))
             if (Math.Abs(location.X - point.X) <= radius && Math.Abs(location.Y - point.Y) <= radius) return (x, y);
         return (0, 0);
     }
@@ -385,14 +537,15 @@ public sealed class VideoCanvas : Control
 
     private void UpdateCursor(Point point)
     {
-        var (x, y) = SizeLocked ? (0, 0) : HitHandle(point);
+        var (x, y) = maskMode ? (selectedMask >= 0 ? HitHandle(point, ToClient(maskRects[selectedMask])) : (0, 0)) : SizeLocked ? (0, 0) : HitHandle(point);
+        bool movable = maskMode ? HitMask(point) >= 0 : !MoveLocked && ToClient(crop).Contains(point);
         Cursor = (x, y) switch
         {
             (-1, -1) or (1, 1) => Cursors.SizeNWSE,
             (-1, 1) or (1, -1) => Cursors.SizeNESW,
             (0, -1) or (0, 1) => Cursors.SizeNS,
             (-1, 0) or (1, 0) => Cursors.SizeWE,
-            _ => !MoveLocked && ToClient(crop).Contains(point) ? Cursors.SizeAll : Cursors.Cross
+            _ => movable ? Cursors.SizeAll : Cursors.Cross
         };
     }
 

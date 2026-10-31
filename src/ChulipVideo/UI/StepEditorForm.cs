@@ -16,6 +16,7 @@ public sealed class StepEditorForm : BrandedForm
     private readonly AppSettings settings;
     private readonly double rangeStart, rangeEnd, currentTime;
     private readonly CropRect crop;
+    private readonly IReadOnlyList<MaskRegion> masks;
     private readonly ListView list = new() { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, HideSelection = false, MultiSelect = true, AccessibleName = "ステップ一覧" };
     private readonly StepPreview preview = new() { Dock = DockStyle.Fill, AccessibleName = "ステップの画像" };
     private readonly TextBox description = new() { Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical, AccessibleName = "説明文" };
@@ -35,8 +36,10 @@ public sealed class StepEditorForm : BrandedForm
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool Dirty { get; private set; }
 
-    public StepEditorForm(FfmpegService media, MediaInfo info, EventLog events, AppSettings settings, double rangeStart, double rangeEnd, CropRect crop, double currentTime)
+    public StepEditorForm(FfmpegService media, MediaInfo info, EventLog events, AppSettings settings, double rangeStart, double rangeEnd, CropRect crop, double currentTime,
+        IReadOnlyList<MaskRegion>? masks = null)
     {
+        this.masks = masks ?? [];
         this.media = media; this.info = info; this.events = events; this.settings = settings;
         this.rangeStart = rangeStart; this.rangeEnd = rangeEnd; this.crop = crop; this.currentTime = currentTime;
         Document = new StepDocument { Start = rangeStart, End = rangeEnd, Crop = crop };
@@ -235,7 +238,7 @@ public sealed class StepEditorForm : BrandedForm
         {
             if (!cache.TryGetValue(step.FrameTime, out var image))
             {
-                image = await StepDetector.RenderImageAsync(media, info, events, crop, settings, step.FrameTime, lifetime.Token);
+                image = await StepDetector.RenderImageAsync(media, info, events, crop, settings, step.FrameTime, masks, lifetime.Token);
                 if (IsDisposed) { image.Dispose(); return; }
                 // 表示中の画像は追い出さない（破棄すると描画中に参照が切れる）。
                 if (cache.Count >= CacheLimit && cache.FirstOrDefault(c => !ReferenceEquals(c.Value, preview.Image)) is { Value: not null } oldest)

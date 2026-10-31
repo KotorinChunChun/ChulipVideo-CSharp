@@ -74,7 +74,7 @@ public sealed partial class MainForm : BrandedForm
         DragEnter+=(_,e)=>e.Effect=e.Data?.GetDataPresent(DataFormats.FileDrop)==true?DragDropEffects.Copy:DragDropEffects.None;
         DragDrop+=(_,e)=>{if(e.Data?.GetData(DataFormats.FileDrop) is string[] paths && paths.Length>0&&!exporting&&!loading)RunUiAsync(()=>LoadAsync(paths[0]));};
         timer.Tick+=(_,_)=>PlaybackTick(); timer.Start();
-        ApplySettings();
+        InitializeMasks();ApplySettings();
         Shown+=(_,_)=>{if(store.Warning is not null)Status(store.Warning);var path=video??settings.LastVideoPath;if(File.Exists(path))RunUiAsync(()=>LoadAsync(path));};
     }
 
@@ -103,7 +103,7 @@ public sealed partial class MainForm : BrandedForm
             settings.LastVideoPath=Path.GetFullPath(path);
             sourcePath.Text=settings.LastVideoPath;tips.SetToolTip(sourcePath,settings.LastVideoPath);
             syncing=true;canvas.VideoSize=new(current.Width,current.Height);outside.Checked=videoSettings.AllowOutside;canvas.AllowOutside=outside.Checked;
-            canvas.Crop=videoSettings.Crop;rangeStart=videoSettings.Start;rangeEnd=videoSettings.End;currentTime=videoSettings.Position;syncing=false;
+            masks=videoSettings.Masks;canvas.SelectedMask=-1;canvas.Crop=videoSettings.Crop;rangeStart=videoSettings.Start;rangeEnd=videoSettings.End;currentTime=videoSettings.Position;syncing=false;
             history.Clear();historyIndex=-1;RememberCrop();SyncTimes();SyncCrop();canvas.ResetView();RequestFrame();
             Status(warning??current.TimingWarning??$"読み込み完了 / 入力ログ {events.Count} 件");TrySaveApp();
         }
@@ -127,7 +127,7 @@ public sealed partial class MainForm : BrandedForm
         bool wasSyncing=syncing;syncing=true;
         try{start.Value=(decimal)rangeStart;position.Value=(decimal)currentTime;end.Value=(decimal)rangeEnd;}
         finally{syncing=wasSyncing;}
-        timeline.Duration=current?.Duration??0;timeline.Start=rangeStart;timeline.End=rangeEnd;timeline.Position=currentTime;timeline.Invalidate();UpdateInfo();
+        timeline.Duration=current?.Duration??0;timeline.Start=rangeStart;timeline.End=rangeEnd;timeline.Position=currentTime;timeline.Invalidate();UpdateInfo();SyncMasks();
     }
     private void RequestFrame(){seekVersion++;if(!rendering)RunUiAsync(RenderLoopAsync);}
     private async Task RenderLoopAsync()
@@ -149,7 +149,7 @@ public sealed partial class MainForm : BrandedForm
         finally{rendering=false;}
     }
     private void Redraw()
-    {if(rawPreview is null||current is null||closing)return;canvas.Frame=FrameComposer.ComposePreview(rawPreview,current,new(canvas.Crop,previewTime,events,settings.Overlay));}
+    {if(rawPreview is null||current is null||closing)return;canvas.Frame=FrameComposer.ComposePreview(rawPreview,current,OutputContext(canvas.Crop,previewTime));}
     private void TogglePlay()
     {
         if(current is null||exporting||loading)return;
@@ -230,7 +230,7 @@ public sealed partial class MainForm : BrandedForm
     private void SaveVideo()
     {
         if(current is null)return;
-        try{SettingsStore.SaveVideo(current,new(){Crop=canvas.Crop,Start=rangeStart,End=rangeEnd,Position=currentTime,AllowOutside=outside.Checked});TrySaveApp();Status("動画設定を保存しました: "+SettingsStore.VideoPath(current.Path));}catch(Exception ex){ShowError(ex);}
+        try{SettingsStore.SaveVideo(current,new(){Crop=canvas.Crop,Start=rangeStart,End=rangeEnd,Position=currentTime,AllowOutside=outside.Checked,Masks=MaskSnapshot().ToList()});TrySaveApp();Status("動画設定を保存しました: "+SettingsStore.VideoPath(current.Path));}catch(Exception ex){ShowError(ex);}
     }
     private void TrySaveApp(){try{store.Save(settings);}catch(Exception ex) when(ex is IOException or UnauthorizedAccessException){Status("設定を保存できません: "+ex.Message);}}
     private void OpenSettings()
@@ -261,16 +261,17 @@ public sealed partial class MainForm : BrandedForm
     {
         if(current is null||media is null){Status("先に動画を選択してください。");return;}
         StopPlaying();
-        using var form=new StepEditorForm(media,current,events,settings,rangeStart,rangeEnd,canvas.Crop,currentTime);
+        using var form=new StepEditorForm(media,current,events,settings,rangeStart,rangeEnd,canvas.Crop,currentTime,MaskSnapshot());
         form.ShowDialog(this);
     }
     private async Task<Bitmap> CurrentImageAsync()
     {
         if(current is null||media is null)throw new InvalidOperationException("先に動画を選択してください。");StopPlaying();
-        var source=current;var crop=canvas.Crop;var log=events;var options=settings.Overlay with{};
-        var time=FrameTime(currentTime,source);
+        var source=current;var time=FrameTime(currentTime,source);
+        // 読込を待つ間の編集が混ざらないよう、合成の指定は先に確定する。
+        var context=OutputContext(canvas.Crop,time) with{Options=settings.Overlay with{}};
         using var frame=await media.ReadFrameAsync(source,time,lifetime.Token);
-        return FrameComposer.Compose(frame,new(crop,time,log,options));
+        return FrameComposer.Compose(frame,context);
     }
     private static double FrameTime(double time,MediaInfo info)=>info.FrameTime(time);
     private async Task CopyAsync(){using var image=await CurrentImageAsync();Clipboard.SetImage(image);Status($"{image.Width}×{image.Height} の画像をコピーしました。");}
@@ -290,7 +291,7 @@ public sealed partial class MainForm : BrandedForm
         if(kind==ExportKind.PngSequence){using var dialog=new FolderBrowserDialog{Description="PNG連番を保存する親フォルダー",UseDescriptionForTitle=true};if(dialog.ShowDialog(this)!=DialogResult.OK)return;outputPath=Path.Combine(dialog.SelectedPath,$"{Path.GetFileNameWithoutExtension(current.Path)}_crops_{DateTime.Now:yyyyMMdd_HHmmss_fff}");}
         else{var ext=kind==ExportKind.Mp4?"mp4":"gif";using var dialog=SaveDialog($"{ext.ToUpperInvariant()}|*.{ext}",$"{Path.GetFileNameWithoutExtension(current.Path)}_clip_{DateTime.Now:HHmmss}.{ext}",null);if(dialog.ShowDialog(this)!=DialogResult.OK)return;if(File.Exists(dialog.FileName)){MessageBox.Show(this,"既存ファイルを保護するため、新しい名前を指定してください。",WindowTitle.Create("保存先"));return;}outputPath=dialog.FileName;}
         var snapshot=System.Text.Json.JsonSerializer.Deserialize<AppSettings>(System.Text.Json.JsonSerializer.Serialize(settings))!;
-        var request=new ExportRequest(current,canvas.Crop,rangeStart,rangeEnd,outputPath,kind,snapshot);
+        var request=new ExportRequest(current,canvas.Crop,rangeStart,rangeEnd,outputPath,kind,snapshot){Masks=MaskSnapshot()};
         exportCancel=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);exporting=true;SetBusy(true);cancel.Enabled=true;progress.Value=0;
         exportTask=ExportAsync(request,media,events,exportCancel.Token);
     }
@@ -315,6 +316,7 @@ public sealed partial class MainForm : BrandedForm
         var key=keyData&Keys.KeyCode;var ctrl=(keyData&Keys.Control)!=0;var alt=(keyData&Keys.Alt)!=0;var shift=(keyData&Keys.Shift)!=0;
         if(ctrl&&key==Keys.O){ChooseVideo();return true;}
         if(ActiveControl is TextBoxBase or NumericUpDown or ComboBox || ContainsFocusedNumeric(this))return base.ProcessCmdKey(ref msg,keyData);
+        if(maskEdit.Checked&&key==Keys.Delete&&!ctrl&&!alt&&!shift){DeleteSelectedMask();return true;}
         if(!ctrl&&!alt&&!shift&&key==Keys.I){SetRange(currentTime,rangeEnd);return true;}
         if(!ctrl&&!alt&&!shift&&key==Keys.O){SetRange(rangeStart,currentTime);return true;}
         if(ctrl&&key==Keys.C){RunUiAsync(CopyAsync);return true;}if(ctrl&&key==Keys.S){RunUiAsync(SaveImageAsync);return true;}if(ctrl&&key==Keys.Z){Undo();return true;}if(ctrl&&key==Keys.Y){Redo();return true;}
