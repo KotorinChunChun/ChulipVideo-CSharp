@@ -112,6 +112,8 @@ public sealed record StepSettings
     public double PostSeconds { get; set; } = .5;
     public bool IncludeWheel { get; set; }
     public bool SaveAfter { get; set; }
+    /// <summary>trueなら手順書の画像を操作位置の周り（切り出し範囲の縦横1/2）に絞る。</summary>
+    public bool FocusImage { get; set; }
 }
 
 public sealed record AppSettings

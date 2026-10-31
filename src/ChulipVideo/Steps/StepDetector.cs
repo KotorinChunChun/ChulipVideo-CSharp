@@ -35,14 +35,62 @@ public static class StepDetector
             double frame = action.Kind == InputActionKind.Text
                 ? After(action.EndTime + TextSettle, action.EndTime + settings.PostSeconds, profile, media)
                 : Before(action.Time, settings.PreSeconds, profile, media);
-            yield return new StepItem
+            var step = new StepItem
             {
                 Kind = action.Kind.ToString(), Time = action.Time, FrameTime = frame,
                 AfterFrameTime = settings.SaveAfter && action.Kind != InputActionKind.Text ? After(action.EndTime + settings.PostSeconds, action.EndTime + settings.PostSeconds, profile, media) : null,
                 X = action.Point.X, Y = action.Point.Y, EndX = action.EndPoint?.X, EndY = action.EndPoint?.Y,
                 Label = action.Label, Description = Describe(action), DescriptionSource = "Template"
             };
+            step.Annotations = DefaultAnnotations(step, media);
+            yield return step;
         }
+    }
+
+    public const int BoxWidth = 120, BoxHeight = 40, BadgeGap = 22, BadgeMargin = 16;
+
+    /// <summary>
+    /// 自動で配置する注釈。マウス操作は番号バッジと強調枠（ドラッグは矢印）、キー操作は注釈なし。
+    /// バッジは枠（ドラッグは始点）の右、入らなければ左へ、操作位置と同じ高さに置き、枠や対象を隠さない。
+    /// </summary>
+    public static List<Annotation> DefaultAnnotations(StepItem step, MediaInfo media)
+    {
+        if (step.Kind is not ("Click" or "DoubleClick" or "RightClick" or "MiddleClick" or "Drag")) return [];
+        var result = new List<Annotation>();
+        int left = step.X, right = step.X;
+        if (step.Kind == "Drag" && step.EndX is int endX && step.EndY is int endY)
+            result.Add(new Annotation { Kind = AnnotationKind.Arrow, X = step.X, Y = step.Y, EndX = endX, EndY = endY });
+        else
+        {
+            int x = Math.Clamp(step.X - BoxWidth / 2, 0, Math.Max(0, media.Width - BoxWidth));
+            int y = Math.Clamp(step.Y - BoxHeight / 2, 0, Math.Max(0, media.Height - BoxHeight));
+            var box = new Annotation { Kind = AnnotationKind.Box, X = x, Y = y, Width = Math.Min(BoxWidth, media.Width), Height = Math.Min(BoxHeight, media.Height) };
+            result.Add(box);
+            left = box.X; right = box.X + box.Width;
+        }
+        int badgeX = right + BadgeGap <= media.Width - BadgeMargin ? right + BadgeGap : left - BadgeGap;
+        int badgeY = Math.Clamp(step.Y, BadgeMargin, Math.Max(BadgeMargin, media.Height - BadgeMargin));
+        result.Add(new Annotation { Kind = AnnotationKind.Badge, X = Math.Max(BadgeMargin, badgeX), Y = badgeY });
+        return Annotation.Normalize(result, media.Width, media.Height);
+    }
+
+    /// <summary>注目範囲: 操作位置を中心に、切り出し範囲の縦横1/2の矩形（切り出し範囲の中に収める）。</summary>
+    public static CropRect FocusArea(StepItem step, CropRect crop)
+    {
+        int width = Math.Max(1, crop.Width / 2), height = Math.Max(1, crop.Height / 2);
+        int x = Math.Clamp(step.X - width / 2, crop.X, crop.X + crop.Width - width);
+        int y = Math.Clamp(step.Y - height / 2, crop.Y, crop.Y + crop.Height - height);
+        return new(x, y, width, height);
+    }
+
+    /// <summary>手順書に載せる画像。マスク・注釈を重ね、設定に応じて注目範囲へ絞る。</summary>
+    public static async Task<Bitmap> RenderStepAsync(FfmpegService service, MediaInfo media, EventLog events, StepItem step, int number, CropRect crop,
+        AppSettings settings, IReadOnlyList<MaskRegion> masks, CancellationToken ct = default)
+    {
+        var area = settings.Steps.FocusImage ? FocusArea(step, crop) : crop;
+        using Bitmap frame = await service.ReadFrameAsync(media, step.FrameTime, ct).ConfigureAwait(false);
+        return FrameComposer.Compose(frame, new(area, step.FrameTime, events, settings.Overlay)
+            { DrawOverlay = false, Masks = masks, Annotations = step.Annotations, StepNumber = number });
     }
 
     private static double Before(double time, double fallback, MotionProfile? profile, MediaInfo media)

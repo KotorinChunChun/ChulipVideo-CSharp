@@ -24,6 +24,7 @@ public sealed record StepItem
     /// <summary>説明文の出どころ: Template / Ocr / Ai / Manual。</summary>
     public string DescriptionSource { get; set; } = "Template";
     public bool Enabled { get; set; } = true;
+    public List<Annotation> Annotations { get; set; } = [];
 }
 
 public sealed record StepDocument
@@ -96,6 +97,7 @@ public static class StepStore
             step.X = Math.Clamp(step.X, 0, Math.Max(0, media.Width - 1)); step.Y = Math.Clamp(step.Y, 0, Math.Max(0, media.Height - 1));
             if (step.EndX is int endX) step.EndX = Math.Clamp(endX, 0, Math.Max(0, media.Width - 1));
             if (step.EndY is int endY) step.EndY = Math.Clamp(endY, 0, Math.Max(0, media.Height - 1));
+            step.Annotations = Annotation.Normalize(step.Annotations, media.Width, media.Height);
         }
     }
 

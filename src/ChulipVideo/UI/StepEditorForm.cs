@@ -18,7 +18,7 @@ public sealed class StepEditorForm : BrandedForm
     private readonly CropRect crop;
     private readonly IReadOnlyList<MaskRegion> masks;
     private readonly ListView list = new() { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, HideSelection = false, MultiSelect = true, AccessibleName = "ステップ一覧" };
-    private readonly StepPreview preview = new() { Dock = DockStyle.Fill, AccessibleName = "ステップの画像" };
+    private readonly AnnotationCanvas preview = new() { Dock = DockStyle.Fill, AccessibleName = "ステップの画像と注釈" };
     private readonly TextBox description = new() { Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical, AccessibleName = "説明文" };
     private readonly CheckBox enabled = new() { Text = "手順書に含める", AutoSize = true };
     private readonly Label detail = new() { Dock = DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft };
@@ -45,7 +45,7 @@ public sealed class StepEditorForm : BrandedForm
         Document = new StepDocument { Start = rangeStart, End = rangeEnd, Crop = crop };
         Text = WindowTitle.Create("手順書エディター");
         StartPosition = FormStartPosition.CenterParent;
-        MinimumSize = new Size(760, 520);
+        MinimumSize = new Size(860, 560);
         ClientSize = new Size(1000, 680);
         ShowInTaskbar = false;
         KeyPreview = true;
@@ -65,6 +65,8 @@ public sealed class StepEditorForm : BrandedForm
             MarkDirty();
         };
         cancel.Click += (_, _) => operation?.Cancel();
+        preview.AnnotationsChanged += (_, _) => MarkDirty();
+        preview.RequestText = AskText;
         Shown += (_, _) => LoadOrDetect();
     }
 
@@ -76,32 +78,35 @@ public sealed class StepEditorForm : BrandedForm
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
         var toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
         toolbar.Controls.AddRange([
-            Tool("再検出", Redetect, "入力ログから手順を作り直す"), Tool("現在位置に追加", AddAtCurrent, "主画面の現在位置に手順を追加"),
+            Tool("再検出", Redetect, "入力ログから手順を作り直す"), Tool("追加", AddAtCurrent, "主画面の現在位置に手順を追加"),
             Tool("削除", DeleteSelected, "選択した手順を削除 (Delete)"), Tool("結合", MergeSelected, "選択した手順を1つにまとめる"),
             Tool("↑", () => MoveSelected(-1), "上へ移動"), Tool("↓", () => MoveSelected(1), "下へ移動"),
+            Tool("自動配置", AutoAnnotate, "選択した手順の注釈を自動配置し直す"), Tool("書き出し…", ExportDocument, "Markdown・HTML・Word・PDFの手順書を書き出す"),
             Tool("保存", () => Save(), "手順ファイルへ保存 (Ctrl+S)"), cancel
         ]);
         root.Controls.Add(toolbar, 0, 0);
 
-        var split = new SplitContainer { Dock = DockStyle.Fill, SplitterDistance = 420, FixedPanel = FixedPanel.Panel1 };
+        var split = new SplitContainer { Dock = DockStyle.Fill, SplitterDistance = 380, FixedPanel = FixedPanel.Panel1 };
         list.Columns.Add("番号", 48); list.Columns.Add("時刻", 96); list.Columns.Add("操作", 120); list.Columns.Add("説明", 400);
         split.Panel1.Controls.Add(list);
-        var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Margin = Padding.Empty };
+        var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Margin = Padding.Empty };
         right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         right.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         right.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
         right.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
         right.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         right.Controls.Add(preview, 0, 0);
+        right.Controls.Add(BuildTools(), 0, 1);
         var frames = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
         frames.Controls.AddRange([
             Tool("−0.1秒", () => ShiftFrame(-.1), "画像を0.1秒前へ"), Tool("◀ 1フレーム", () => ShiftFrame(-1 / info.Fps), "画像を1フレーム前へ"),
             Tool("1フレーム ▶", () => ShiftFrame(1 / info.Fps), "画像を1フレーム後へ"), Tool("+0.1秒", () => ShiftFrame(.1), "画像を0.1秒後へ")
         ]);
-        right.Controls.Add(frames, 0, 1);
-        right.Controls.Add(detail, 0, 2);
-        right.Controls.Add(description, 0, 3);
-        right.Controls.Add(enabled, 0, 4);
+        right.Controls.Add(frames, 0, 2);
+        right.Controls.Add(detail, 0, 3);
+        right.Controls.Add(description, 0, 4);
+        right.Controls.Add(enabled, 0, 5);
         editors.AddRange([frames, description, enabled]);
         split.Panel2.Controls.Add(right);
         root.Controls.Add(split, 0, 1);
@@ -122,6 +127,7 @@ public sealed class StepEditorForm : BrandedForm
         if (busy) return base.ProcessCmdKey(ref msg, keyData);
         if (keyData == (Keys.Control | Keys.S)) { Save(); return true; }
         if (keyData == Keys.Delete && ActiveControl == list) { DeleteSelected(); return true; }
+        if (keyData == Keys.Delete && ActiveControl == preview) { preview.DeleteSelected(); return true; }
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
@@ -233,7 +239,7 @@ public sealed class StepEditorForm : BrandedForm
     private async Task LoadImageAsync(StepItem? step)
     {
         int version = ++imageVersion;
-        if (step is null) { preview.SetImage(null, null, null, crop); return; }
+        if (step is null) { preview.SetStep(null, null, 0, crop); return; }
         try
         {
             if (!cache.TryGetValue(step.FrameTime, out var image))
@@ -246,7 +252,7 @@ public sealed class StepEditorForm : BrandedForm
                 cache[step.FrameTime] = image;
             }
             if (version != imageVersion || IsDisposed) return;
-            preview.SetImage(image, new Point(step.X, step.Y), step.EndX is int x && step.EndY is int y ? new Point(x, y) : null, crop);
+            preview.SetStep(image, step.Annotations, NumberOf(step), crop);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is IOException or TimeoutException or InvalidOperationException or Win32Exception)
@@ -317,6 +323,72 @@ public sealed class StepEditorForm : BrandedForm
         }
     }
 
+    private Control BuildTools()
+    {
+        var row = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
+        var buttons = new List<RadioButton>();
+        foreach (var (tool, text, tip) in new[]
+        {
+            (AnnotationTool.Select, "選択", "注釈を選んでドラッグで移動、Deleteで削除"), (AnnotationTool.Box, "枠", "ドラッグで強調枠を描く"),
+            (AnnotationTool.Arrow, "矢印", "ドラッグで矢印を描く"), (AnnotationTool.Text, "文字", "クリックした位置に文字を置く"),
+            (AnnotationTool.Badge, "番号", "クリックした位置に手順番号を置く"), (AnnotationTool.Spotlight, "強調", "ドラッグした範囲以外を暗くする")
+        })
+        {
+            var radio = new RadioButton { Text = text, Appearance = Appearance.Button, AutoSize = true, AccessibleName = tip, Margin = new Padding(2), Checked = tool == AnnotationTool.Select, Tag = tool };
+            radio.CheckedChanged += (_, _) => { if (radio.Checked) preview.Tool = tool; };
+            buttons.Add(radio);
+            row.Controls.Add(radio);
+        }
+        preview.ToolCompleted += (_, _) => buttons[0].Checked = true;
+        row.Controls.Add(Tool("削除", preview.DeleteSelected, "選択した注釈を削除 (Delete)"));
+        editors.Add(row);
+        return row;
+    }
+
+    /// <summary>除外した手順を数えない、手順書での番号。</summary>
+    private int NumberOf(StepItem step) => Document.Steps.TakeWhile(s => !ReferenceEquals(s, step)).Count(s => s.Enabled) + 1;
+
+    private void AutoAnnotate()
+    {
+        var indices = list.SelectedIndices.Cast<int>().ToArray();
+        if (indices.Length == 0) { Status("注釈を自動配置する手順を選んでください。"); return; }
+        foreach (int index in indices) Document.Steps[index].Annotations = StepDetector.DefaultAnnotations(Document.Steps[index], info);
+        MarkDirty(); ShowSelected();
+        Status($"{indices.Length} 件の手順の注釈を自動配置しました。");
+    }
+
+    private string? AskText()
+    {
+        using var dialog = new BrandedForm { Text = WindowTitle.Create("文字の注釈"), ClientSize = new Size(380, 110), StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false, ShowInTaskbar = false };
+        var text = new TextBox { Location = new Point(12, 14), Width = 356, AccessibleName = "注釈の文字" };
+        var ok = new Button { Text = "置く", DialogResult = DialogResult.OK, Location = new Point(196, 62), Size = new Size(80, 30) };
+        var no = new Button { Text = "キャンセル", DialogResult = DialogResult.Cancel, Location = new Point(286, 62), Size = new Size(82, 30) };
+        dialog.Controls.AddRange([text, ok, no]); dialog.AcceptButton = ok; dialog.CancelButton = no;
+        return dialog.ShowDialog(this) == DialogResult.OK ? text.Text.Trim() : null;
+    }
+
+    private void ExportDocument()
+    {
+        if (!Document.Steps.Any(s => s.Enabled)) { Status("手順書に含める手順がありません。"); return; }
+        string title, folder; StepDocumentFormat formats;
+        using (var dialog = new StepExportForm(Path.GetFileNameWithoutExtension(info.Path) + " の手順", Path.GetDirectoryName(info.Path) ?? "", settings.Steps.FocusImage, EdgePdf.FindEdge() is not null))
+        {
+            if (dialog.ShowDialog(this) != DialogResult.OK) return;
+            title = dialog.TitleText; folder = dialog.Folder; formats = dialog.Formats;
+            settings.Steps.FocusImage = dialog.FocusImage;
+        }
+        _ = RunAsync("手順書を書き出しています…", async token =>
+        {
+            var progress = new Progress<string>(Status);
+            var result = await StepDocumentWriter.ExportAsync(media, info, events, Document, settings, masks, new(title, formats, folder), progress, token);
+            if (IsDisposed) return;
+            Status("手順書を書き出しました: " + result.Directory);
+            string message = "手順書を書き出しました。\n" + result.Directory + (result.PdfWarning is null ? "" : "\n\n" + result.PdfWarning) + "\n\nフォルダーを開きますか。";
+            if (MessageBox.Show(this, message, Text, MessageBoxButtons.YesNo, result.PdfWarning is null ? MessageBoxIcon.Information : MessageBoxIcon.Warning) == DialogResult.Yes)
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe") { UseShellExecute = true, Arguments = "\"" + result.Directory + "\"" });
+        });
+    }
+
     private void MarkDirty() { Dirty = true; UpdateTitle(); }
     private void UpdateTitle() => Text = WindowTitle.Create("手順書エディター" + (Dirty ? " *" : ""));
     private void Status(string message) { if (!IsDisposed) status.Text = message; }
@@ -342,54 +414,5 @@ public sealed class StepEditorForm : BrandedForm
             cache.Clear();
         }
         base.Dispose(disposing);
-    }
-
-    /// <summary>ステップの画像と操作位置の目印を表示する。画像は所有せず、呼び出し側が破棄する。</summary>
-    private sealed class StepPreview : Control
-    {
-        private Point? point, endPoint;
-        private CropRect area;
-        public Bitmap? Image { get; private set; }
-
-        public StepPreview()
-        {
-            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-            BackColor = Color.FromArgb(120, 120, 120);
-        }
-
-        public void SetImage(Bitmap? image, Point? point, Point? endPoint, CropRect area)
-        {
-            Image = image; this.point = point; this.endPoint = endPoint; this.area = area;
-            Invalidate();
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            base.OnPaint(e);
-            var g = e.Graphics;
-            g.Clear(BackColor);
-            if (Image is null)
-            {
-                TextRenderer.DrawText(g, "手順を選ぶと画像を表示します", Font, ClientRectangle, Color.Gainsboro, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-                return;
-            }
-            float scale = Math.Min((Width - 8f) / Image.Width, (Height - 8f) / Image.Height);
-            var target = new RectangleF((Width - Image.Width * scale) / 2, (Height - Image.Height * scale) / 2, Image.Width * scale, Image.Height * scale);
-            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
-            g.DrawImage(Image, target);
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            PointF Map(Point p) => new(target.X + (p.X - area.X) * scale, target.Y + (p.Y - area.Y) * scale);
-            using var pen = new Pen(Color.Red, 3);
-            if (point is Point start)
-            {
-                var p = Map(start);
-                g.DrawEllipse(pen, p.X - 12, p.Y - 12, 24, 24);
-                if (endPoint is Point end)
-                {
-                    using var arrow = new Pen(Color.Red, 3) { CustomEndCap = new System.Drawing.Drawing2D.AdjustableArrowCap(5, 5) };
-                    g.DrawLine(arrow, p, Map(end));
-                }
-            }
-        }
     }
 }

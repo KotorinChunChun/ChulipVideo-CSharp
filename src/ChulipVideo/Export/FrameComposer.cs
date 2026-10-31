@@ -9,6 +9,10 @@ public sealed record RenderContext(CropRect Crop, double Time, EventLog Events, 
     public bool DrawOverlay { get; init; } = true;
     /// <summary>①で描くマスク。DrawOverlayに関係なく常に適用する。</summary>
     public IReadOnlyList<MaskRegion> Masks { get; init; } = [];
+    /// <summary>⑤で描く手順書の注釈（出力用の合成のみ）。</summary>
+    public IReadOnlyList<Annotation> Annotations { get; init; } = [];
+    /// <summary>注釈の番号バッジに描く手順番号。</summary>
+    public int StepNumber { get; init; }
 }
 
 /// <summary>
@@ -22,7 +26,15 @@ public static class FrameComposer
     public static Bitmap Compose(Bitmap frame, RenderContext context)
     {
         using Bitmap? masked = Masked(frame, context, 1, 1);
-        return OverlayRenderer.Render(masked ?? frame, context.Crop, context.Time, context.Events, context.Options, context.DrawOverlay);
+        var result = OverlayRenderer.Render(masked ?? frame, context.Crop, context.Time, context.Events, context.Options, context.DrawOverlay);
+        if (context.Annotations.Count == 0) return result;
+        try
+        {
+            using var graphics = Graphics.FromImage(result);
+            AnnotationRenderer.Draw(graphics, context.Annotations, new PointF(-context.Crop.X, -context.Crop.Y), 1, context.StepNumber);
+            return result;
+        }
+        catch { result.Dispose(); throw; }
     }
 
     /// <summary>プレビュー用。縮小フレームの全体へ、元動画との比率で演出を重ねる。</summary>
