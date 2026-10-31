@@ -289,8 +289,8 @@ public sealed partial class MainForm
         stable.Margin = duplicates.Margin = new Padding(2, 1, 0, 0);
         options.Controls.Add(stable, 0, 0);
         options.Controls.Add(duplicates, 0, 1);
-        tips.SetToolTip(stable, "前後フレームが完全一致する静止場面だけをPNG連番へ出力");
-        tips.SetToolTip(duplicates, "直前と同じ画像をPNG連番から除外");
+        tips.SetToolTip(stable, "前後フレームと同じ静止場面だけをPNG連番へ出力（判定の厳しさは詳細設定）");
+        tips.SetToolTip(duplicates, "直前と同じ画像をPNG連番から除外（判定の厳しさは詳細設定）");
         var compression = Grid("pngCompressionRow", 2, -1);
         compression.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 59));
         compression.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));

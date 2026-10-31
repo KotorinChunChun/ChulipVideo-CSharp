@@ -15,7 +15,7 @@ public sealed class SettingsForm : BrandedForm
 
     public SettingsForm(AppSettings settings)
     {
-        Settings = settings with { Overlay = settings.Overlay with { }, Presets = settings.Presets.Select(x => x with { }).ToList() };
+        Settings = settings with { Overlay = settings.Overlay with { }, Stability = settings.Stability with { }, Presets = settings.Presets.Select(x => x with { }).ToList() };
         Text = WindowTitle.Create("詳細設定");
         StartPosition = FormStartPosition.CenterParent;
         MinimumSize = new Size(540, 420);
@@ -114,11 +114,41 @@ public sealed class SettingsForm : BrandedForm
         Row(table, "PNG 圧縮レベル (0～9)", Number(Settings.PngCompression, 0, 9, x => Settings.PngCompression = (int)x));
         Row(table, "静止した場面のみ出力", Check(Settings.StableOnly, x => Settings.StableOnly = x));
         Row(table, "重複画像を省く", Check(Settings.SkipDuplicates, x => Settings.SkipDuplicates = x));
+        BuildStability(table);
         Row(table, "入力表示を映像に焼き込む", Check(Settings.BurnOverlay, x => Settings.BurnOverlay = x));
         Row(table, "入力ログ TSV を出力", Check(Settings.ExportTsv, x => Settings.ExportTsv = x));
         Row(table, "字幕 SRT を出力", Check(Settings.ExportSrt, x => Settings.ExportSrt = x));
         Row(table, "字幕 VTT を出力", Check(Settings.ExportVtt, x => Settings.ExportVtt = x));
         Note(table, "静止・重複の設定は PNG 連番出力に適用します。入力表示と字幕には動画に対応する入力ログが必要です。");
+    }
+
+    private void BuildStability(TableLayoutPanel table)
+    {
+        var s = Settings.Stability;
+        (string Label, StabilitySettings Value)[] presets = [("完全一致", StabilitySettings.Exact), ("標準", StabilitySettings.Standard), ("ゆるい", StabilitySettings.Loose)];
+        var level = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 180, AccessibleName = "静止・重複の判定" };
+        level.Items.AddRange([.. presets.Select(p => (object)p.Label), "数値で指定"]);
+        var threshold = Number(s.ChannelThreshold, 0, 255, x => s.ChannelThreshold = (int)x);
+        var ratio = Number((decimal)(s.MaxChangedRatio * 100), 0, 20, x => s.MaxChangedRatio = (double)x / 100, 2, 0.01m);
+        bool syncing = false;
+        void SelectMatching()
+        {
+            int index = Array.FindIndex(presets, p => p.Value.ChannelThreshold == s.ChannelThreshold && Math.Abs(p.Value.MaxChangedRatio - s.MaxChangedRatio) < 1e-9);
+            syncing = true; level.SelectedIndex = index >= 0 ? index : presets.Length; syncing = false;
+        }
+        level.SelectedIndexChanged += (_, _) =>
+        {
+            if (syncing || level.SelectedIndex >= presets.Length) return;
+            var preset = presets[level.SelectedIndex].Value;
+            threshold.Value = preset.ChannelThreshold; ratio.Value = (decimal)(preset.MaxChangedRatio * 100);
+        };
+        threshold.ValueChanged += (_, _) => { if (!syncing) SelectMatching(); };
+        ratio.ValueChanged += (_, _) => { if (!syncing) SelectMatching(); };
+        SelectMatching();
+        Row(table, "静止・重複の判定", level);
+        Row(table, "許す色の差 (0～255)", threshold);
+        Row(table, "許す変化の割合 (%)", ratio);
+        Note(table, "動画の圧縮で静止場面の画素がわずかに揺れても同じ画像とみなします。「完全一致」は全画素の一致だけを同じとみなします。");
     }
 
     private void BuildPointer(TableLayoutPanel table)

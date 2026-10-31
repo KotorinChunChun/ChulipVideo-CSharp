@@ -108,13 +108,14 @@ public sealed class ExportService(FfmpegService media)
             while (current is not null)
             {
                 ct.ThrowIfCancellationRequested();
+                var tolerance = request.Settings.Stability;
                 bool stable = !request.Settings.StableOnly ||
-                    ((previous is null || previous.AsSpan().SequenceEqual(current.Pixels)) && (next is null || next.Pixels.AsSpan().SequenceEqual(current.Pixels)));
-                bool duplicate = request.Settings.SkipDuplicates && lastSaved is not null && lastSaved.AsSpan().SequenceEqual(current.Pixels);
+                    ((previous is null || FrameComparer.IsSame(previous, current.Pixels, tolerance)) && (next is null || FrameComparer.IsSame(next.Pixels, current.Pixels, tolerance)));
+                bool duplicate = request.Settings.SkipDuplicates && lastSaved is not null && FrameComparer.IsSame(lastSaved, current.Pixels, tolerance);
                 if (stable && !duplicate)
                 {
                     double seconds = request.Media.FrameTime(request.Start + index / request.Media.Fps);
-                    using Bitmap rendered = OverlayRenderer.Render(current.Frame, request.Crop, seconds, events, request.Settings.Overlay);
+                    using Bitmap rendered = FrameComposer.Compose(current.Frame, new(request.Crop, seconds, events, request.Settings.Overlay));
                     string name = FormattableString.Invariant($"frame_{index:D8}_{seconds:F3}s.png");
                     SavePng(rendered, Path.Combine(output, name), request.Settings.PngCompression);
                     lastSaved = current.Pixels;
@@ -158,8 +159,8 @@ public sealed class ExportService(FfmpegService media)
                     ct.ThrowIfCancellationRequested();
                     using Bitmap? frame = await reader.ReadAsync(ct).ConfigureAwait(false);
                     if (frame is null) break;
-                    using Bitmap rendered = OverlayRenderer.Render(frame, request.Crop, request.Media.FrameTime(request.Start + count / request.Media.Fps), events,
-                        request.Settings.Overlay, request.Settings.BurnOverlay);
+                    using Bitmap rendered = FrameComposer.Compose(frame, new(request.Crop, request.Media.FrameTime(request.Start + count / request.Media.Fps), events,
+                        request.Settings.Overlay) { DrawOverlay = request.Settings.BurnOverlay });
                     byte[] pixels = BitmapPixels.Bgra(rendered);
                     await encoder.StandardInput.BaseStream.WriteAsync(pixels, ct).ConfigureAwait(false);
                     count++;
@@ -239,7 +240,7 @@ public sealed class ExportService(FfmpegService media)
         if (frame is null) return null;
         try
         {
-            using Bitmap raw = OverlayRenderer.Render(frame, crop, 0, EventLog.Empty, new(), false);
+            using Bitmap raw = FrameComposer.Compose(frame, new(crop, 0, EventLog.Empty, new()) { DrawOverlay = false });
             return new(frame, BitmapPixels.Bgra(raw));
         }
         catch { frame.Dispose(); throw; }

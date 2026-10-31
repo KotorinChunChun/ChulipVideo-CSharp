@@ -149,7 +149,7 @@ public sealed partial class MainForm : BrandedForm
         finally{rendering=false;}
     }
     private void Redraw()
-    {if(rawPreview is null||current is null||closing)return;canvas.Frame=OverlayRenderer.RenderPreview(rawPreview,current,previewTime,events,settings.Overlay,canvas.Crop);}
+    {if(rawPreview is null||current is null||closing)return;canvas.Frame=FrameComposer.ComposePreview(rawPreview,current,new(canvas.Crop,previewTime,events,settings.Overlay));}
     private void TogglePlay()
     {
         if(current is null||exporting||loading)return;
@@ -263,7 +263,7 @@ public sealed partial class MainForm : BrandedForm
         var source=current;var crop=canvas.Crop;var log=events;var options=settings.Overlay with{};
         var time=FrameTime(currentTime,source);
         using var frame=await media.ReadFrameAsync(source,time,lifetime.Token);
-        return OverlayRenderer.Render(frame,crop,time,log,options);
+        return FrameComposer.Compose(frame,new(crop,time,log,options));
     }
     private static double FrameTime(double time,MediaInfo info)=>info.FrameTime(time);
     private async Task CopyAsync(){using var image=await CurrentImageAsync();Clipboard.SetImage(image);Status($"{image.Width}×{image.Height} の画像をコピーしました。");}

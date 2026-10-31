@@ -24,7 +24,14 @@ public sealed class FrameReader : IAsyncDisposable
         _pixels = new byte[checked(width * height * 4)];
     }
 
-    public async Task<Bitmap?> ReadAsync(CancellationToken ct = default)
+    public async Task<Bitmap?> ReadAsync(CancellationToken ct = default) =>
+        await ReadCoreAsync(pixels => CreateBitmap(pixels, Width, Height), ct).ConfigureAwait(false);
+
+    /// <summary>次のフレームのBGRA画素（幅×高さ×4）をコピーして返す。終端ではnull。</summary>
+    public async Task<byte[]?> ReadPixelsAsync(CancellationToken ct = default) =>
+        await ReadCoreAsync(pixels => pixels.ToArray(), ct).ConfigureAwait(false);
+
+    private async Task<T?> ReadCoreAsync<T>(Func<byte[], T> create, CancellationToken ct) where T : class
     {
         using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _lifetime.Token);
         using CancellationTokenRegistration cancellation = linked.Token.Register(_process.Kill);
@@ -57,7 +64,7 @@ public sealed class FrameReader : IAsyncDisposable
                     await _process.WaitForSuccessAsync(timeout.Token).ConfigureAwait(false);
                     _ended = true;
                 }
-                return CreateBitmap(_pixels, Width, Height);
+                return create(_pixels);
             }
             catch (OperationCanceledException ex) when (!linked.IsCancellationRequested)
             { throw new TimeoutException("動画フレームの取得が 30 秒以内に完了しませんでした。", ex); }

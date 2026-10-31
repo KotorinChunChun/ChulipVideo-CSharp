@@ -71,6 +71,17 @@ public sealed record OverlayOptions
     public int OffsetY { get; set; }
 }
 
+/// <summary>静止判定・重複除外の許容差。0・0は完全一致。</summary>
+public sealed record StabilitySettings
+{
+    public static StabilitySettings Exact => new() { ChannelThreshold = 0, MaxChangedRatio = 0 };
+    public static StabilitySettings Standard => new();
+    public static StabilitySettings Loose => new() { ChannelThreshold = 24, MaxChangedRatio = .005 };
+    public int ChannelThreshold { get; set; } = 8;
+    public double MaxChangedRatio { get; set; } = .0005;
+    [System.Text.Json.Serialization.JsonIgnore] public bool IsExact => ChannelThreshold == 0 && MaxChangedRatio == 0;
+}
+
 public sealed record AppSettings
 {
     public string FfmpegPath { get; set; } = "";
@@ -83,6 +94,7 @@ public sealed record AppSettings
     public bool PingPong { get; set; }
     public bool StableOnly { get; set; } = true;
     public bool SkipDuplicates { get; set; } = true;
+    public StabilitySettings Stability { get; set; } = new();
     public int PngCompression { get; set; } = 3;
     public bool BurnOverlay { get; set; }
     public bool ExportTsv { get; set; } = true;

@@ -25,6 +25,9 @@ public sealed class SettingsStore(string? path = null)
             settings.CropColor = ColorText.Normalize(settings.CropColor, "#FF8C00");
             settings.Overlay ??= new();
             NormalizeOverlay(settings.Overlay);
+            settings.Stability ??= new();
+            settings.Stability.ChannelThreshold = Math.Clamp(settings.Stability.ChannelThreshold, 0, 255);
+            settings.Stability.MaxChangedRatio = FiniteClamp(settings.Stability.MaxChangedRatio, 0, .2);
             return settings;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or ArgumentException)
@@ -98,12 +101,5 @@ public sealed class SettingsStore(string? path = null)
 
     private static double FiniteClamp(double x,double min,double max) => Math.Clamp(double.IsFinite(x)?x:min,min,Math.Max(min,max));
     public static void SaveVideo(MediaInfo info, VideoSettings settings) => WriteAtomic(VideoPath(info.Path),settings);
-    private static void WriteAtomic<T>(string path,T value)
-    {
-        var full = System.IO.Path.GetFullPath(path);
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(full)!);
-        var temp = full + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try { File.WriteAllText(temp,JsonSerializer.Serialize(value,Json)); File.Move(temp,full,true); }
-        finally { if(File.Exists(temp)) File.Delete(temp); }
-    }
+    private static void WriteAtomic<T>(string path,T value) => AtomicFile.WriteAllText(path,JsonSerializer.Serialize(value,Json));
 }
