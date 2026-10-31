@@ -82,6 +82,15 @@ public sealed record StabilitySettings
     [System.Text.Json.Serialization.JsonIgnore] public bool IsExact => ChannelThreshold == 0 && MaxChangedRatio == 0;
 }
 
+/// <summary>ステップ抽出の設定。秒は操作の時刻からの相対値。</summary>
+public sealed record StepSettings
+{
+    public double PreSeconds { get; set; } = .2;
+    public double PostSeconds { get; set; } = .5;
+    public bool IncludeWheel { get; set; }
+    public bool SaveAfter { get; set; }
+}
+
 public sealed record AppSettings
 {
     public string FfmpegPath { get; set; } = "";
@@ -95,6 +104,7 @@ public sealed record AppSettings
     public bool StableOnly { get; set; } = true;
     public bool SkipDuplicates { get; set; } = true;
     public StabilitySettings Stability { get; set; } = new();
+    public StepSettings Steps { get; set; } = new();
     public int PngCompression { get; set; } = 3;
     public bool BurnOverlay { get; set; }
     public bool ExportTsv { get; set; } = true;

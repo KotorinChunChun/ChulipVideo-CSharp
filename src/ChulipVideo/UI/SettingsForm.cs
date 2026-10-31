@@ -15,7 +15,7 @@ public sealed class SettingsForm : BrandedForm
 
     public SettingsForm(AppSettings settings)
     {
-        Settings = settings with { Overlay = settings.Overlay with { }, Stability = settings.Stability with { }, Presets = settings.Presets.Select(x => x with { }).ToList() };
+        Settings = settings with { Overlay = settings.Overlay with { }, Stability = settings.Stability with { }, Steps = settings.Steps with { }, Presets = settings.Presets.Select(x => x with { }).ToList() };
         Text = WindowTitle.Create("詳細設定");
         StartPosition = FormStartPosition.CenterParent;
         MinimumSize = new Size(540, 420);

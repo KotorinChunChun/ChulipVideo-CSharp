@@ -257,6 +257,13 @@ public sealed partial class MainForm : BrandedForm
         try{Process.Start(new ProcessStartInfo(path){UseShellExecute=true});}
         catch(Exception ex) when(ex is System.ComponentModel.Win32Exception or InvalidOperationException){ShowError(ex);}
     }
+    private void OpenStepEditor()
+    {
+        if(current is null||media is null){Status("先に動画を選択してください。");return;}
+        StopPlaying();
+        using var form=new StepEditorForm(media,current,events,settings,rangeStart,rangeEnd,canvas.Crop,currentTime);
+        form.ShowDialog(this);
+    }
     private async Task<Bitmap> CurrentImageAsync()
     {
         if(current is null||media is null)throw new InvalidOperationException("先に動画を選択してください。");StopPlaying();

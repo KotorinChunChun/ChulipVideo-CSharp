@@ -6,6 +6,7 @@ ChulipVideo.Tests.EditingControlTests.Run();
 ChulipVideo.Tests.ManagementTests.Run(Path.Combine(args.Length >= 2 ? args[1] : Path.GetTempPath(), "chulip-management-tests"));
 ChulipVideo.Tests.SafetyTests.Run(Path.Combine(args.Length >= 2 ? args[1] : Path.GetTempPath(), "chulip-safety-tests"));
 ChulipVideo.Tests.FoundationTests.Run(Path.Combine(args.Length >= 2 ? args[1] : Path.GetTempPath(), "chulip-foundation-tests"));
+ChulipVideo.Tests.StepTests.Run(Path.Combine(args.Length >= 2 ? args[1] : Path.GetTempPath(), "chulip-step-tests"));
 if(args.Length>=2)
 {
     Directory.CreateDirectory(args[1]);
@@ -13,4 +14,5 @@ if(args.Length>=2)
     await ChulipVideo.Tests.MediaTests.RunAsync(args[0],args[1]);
     await ChulipVideo.Tests.ExportTests.RunAsync(args[0],args[1]);
     await ChulipVideo.Tests.FoundationTests.RunMediaAsync(args[0],args[1]);
+    await ChulipVideo.Tests.StepTests.RunMediaAsync(args[0],args[1]);
 }

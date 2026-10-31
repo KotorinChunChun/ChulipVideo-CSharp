@@ -28,6 +28,9 @@ public sealed class SettingsStore(string? path = null)
             settings.Stability ??= new();
             settings.Stability.ChannelThreshold = Math.Clamp(settings.Stability.ChannelThreshold, 0, 255);
             settings.Stability.MaxChangedRatio = FiniteClamp(settings.Stability.MaxChangedRatio, 0, .2);
+            settings.Steps ??= new();
+            settings.Steps.PreSeconds = FiniteClamp(settings.Steps.PreSeconds, 0, 5);
+            settings.Steps.PostSeconds = FiniteClamp(settings.Steps.PostSeconds, 0, 5);
             return settings;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or ArgumentException)
