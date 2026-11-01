@@ -17,3 +17,13 @@ release/
 *.db
 *.db-wal
 *.db-shm
+
+# セキュリティ点検: 秘密保管と生成物の公開混入を防ぐ
+/artifacts/
+/dev/private/
+/dev/temp/
+secrets.json
+credentials.json
+.npmrc
+*.sqlite
+*.sqlite3

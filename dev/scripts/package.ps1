@@ -202,6 +202,7 @@ FFmpegは別途必要です。設定画面から、利用者が用意した既�
         }
         [ordered]@{ path = $relative; length = $file.Length; sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
     })
+    & (Join-Path $PSScriptRoot 'test-public-payload-security.ps1') -Payload $payload -ReportDirectory (Join-Path $run 'security') | Out-Host
     $zipName = "ChulipVideo-CSharp-v$version-win-x64.zip"
     $zipPath = Join-Path $run $zipName
     [IO.Compression.ZipFile]::CreateFromDirectory($payload, $zipPath, [IO.Compression.CompressionLevel]::Optimal, $false)

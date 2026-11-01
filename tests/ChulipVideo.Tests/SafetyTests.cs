@@ -47,10 +47,23 @@ internal static class SafetyTests
         File.WriteAllText(Path.Combine(root, ".local", "ffmpeg.exe"), "");
         Check(FfmpegService.FindDevelopmentExecutable(bin) is null, "リポジトリ外側の.localを探さない");
 
-        // tool.jsonのない場所から起動しても、親の.localを拾わない。
+        // 試験素材自体が実リポジトリ内に置かれる場合、その外側には正規のtool.jsonがある。
+        // 素材内の目印のない.localを無視し、素材を置く前からの探索結果だけを許可する。
+        string? enclosingExecutable = FfmpegService.FindDevelopmentExecutable(Directory.GetParent(root)!.FullName);
         string loose = Path.Combine(root, "loose", "bin");
         Directory.CreateDirectory(loose);
-        Check(FfmpegService.FindDevelopmentExecutable(loose) is null, "目印のない親の.localを探さない");
+        string? looseExecutable = FfmpegService.FindDevelopmentExecutable(loose);
+        Check(looseExecutable != Path.Combine(root, ".local", "ffmpeg.exe"), "目印のない親の.localを探さない");
+        Check(looseExecutable == enclosingExecutable, "試験素材外の正規リポジトリの探索結果を維持");
+
+        // より近い目印ができたら、その場所にFFmpegがなくても上位の正規リポジトリへ遡らない。
+        string nearestRepo = Path.Combine(root, "loose");
+        File.WriteAllText(Path.Combine(nearestRepo, "tool.json"), "{}");
+        Check(FfmpegService.FindDevelopmentExecutable(loose) is null, "最寄りの目印にFFmpegがなければ探索を終了");
+        Directory.CreateDirectory(Path.Combine(nearestRepo, ".local"));
+        string nearestExecutable = Path.Combine(nearestRepo, ".local", "ffmpeg.exe");
+        File.WriteAllText(nearestExecutable, "");
+        Check(FfmpegService.FindDevelopmentExecutable(loose) == nearestExecutable, "複数の目印があっても最寄りのリポジトリだけを使用");
 
         // カレントディレクトリの.localは自動検索の対象外。
         string previous = Environment.CurrentDirectory;
