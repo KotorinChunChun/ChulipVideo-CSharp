@@ -140,7 +140,7 @@ public static class EditingControlTests
         var original = new AppSettings { CanvasColor = "#123456", CropColor = "#345678", FfmpegPath = "" };
         using var form = new SettingsForm(original);
         var tabs = Descendants(form).OfType<TabControl>().Single();
-        Equal("ポインター・クリック|入力字幕|テーマ|出力・FFmpeg", string.Join('|', tabs.TabPages.Cast<TabPage>().Select(page => page.Text)), "設定タブの順序");
+        Equal("ポインター・クリック|入力字幕|テーマ|出力・FFmpeg|演出", string.Join('|', tabs.TabPages.Cast<TabPage>().Select(page => page.Text)), "設定タブの順序");
         Equal("保存", ((Button)form.AcceptButton!).Text, "適用ボタンの表記");
         Equal("#123456", form.Settings.CanvasColor, "既存キャンバス色を維持");
         Equal("#345678", form.Settings.CropColor, "既存枠色を維持");

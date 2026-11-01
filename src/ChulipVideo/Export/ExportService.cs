@@ -51,12 +51,15 @@ public sealed class ExportService(FfmpegService media)
             int total = Math.Max(1, checked((int)Math.Ceiling((request.End - request.Start) * request.Media.Fps - 1e-7)));
             string stagedTarget = Path.Combine(stage, Path.GetFileName(target));
             int count;
+            // 自動ズームは動画（MP4・GIF）だけに使う。PNG連番は切り出し範囲のまま。
+            var camera = request.Kind != ExportKind.PngSequence && request.Settings.Zoom.Enabled
+                ? CameraTrack.FromEvents(events, request.Crop, request.Settings.Zoom) : CameraTrack.Identity(request.Crop);
             if (request.Kind == ExportKind.PngSequence)
             {
                 Directory.CreateDirectory(stagedTarget);
                 count = await ExportPngAsync(request, events, stagedTarget, total, progress, ct).ConfigureAwait(false);
             }
-            else count = await ExportMovieAsync(request, events, stage, stagedTarget, total, progress, ct).ConfigureAwait(false);
+            else count = await ExportMovieAsync(request, events, camera, stage, stagedTarget, total, progress, ct).ConfigureAwait(false);
 
             string sidecarBase = request.Kind == ExportKind.PngSequence
                 ? Path.Combine(stagedTarget, "operations") : Path.Combine(stage, Path.GetFileNameWithoutExtension(target));
@@ -64,7 +67,7 @@ public sealed class ExportService(FfmpegService media)
             {
                 string content = suffix switch
                 {
-                    ".tsv" => events.ToTsv(request.Start, request.End, request.Media.Fps, request.Crop),
+                    ".tsv" => events.ToTsv(request.Start, request.End, request.Media.Fps, request.Crop, camera.IsIdentity ? null : camera.ViewAt),
                     ".srt" => events.ToSubtitles(request.Start, request.End, request.Settings.Overlay, false),
                     _ => events.ToSubtitles(request.Start, request.End, request.Settings.Overlay, true)
                 };
@@ -133,7 +136,7 @@ public sealed class ExportService(FfmpegService media)
         finally { current?.Dispose(); next?.Dispose(); }
     }
 
-    private async Task<int> ExportMovieAsync(ExportRequest request, EventLog events, string stage, string output, int total, IProgress<ExportProgress>? progress, CancellationToken ct)
+    private async Task<int> ExportMovieAsync(ExportRequest request, EventLog events, CameraTrack camera, string stage, string output, int total, IProgress<ExportProgress>? progress, CancellationToken ct)
     {
         bool gif = request.Kind == ExportKind.Gif;
         string encoded = gif ? Path.Combine(stage, "rendered.nut") : output;
@@ -161,7 +164,8 @@ public sealed class ExportService(FfmpegService media)
                     using Bitmap? frame = await reader.ReadAsync(ct).ConfigureAwait(false);
                     if (frame is null) break;
                     using Bitmap rendered = FrameComposer.Compose(frame, new(request.Crop, request.Media.FrameTime(request.Start + count / request.Media.Fps), events,
-                        request.Settings.Overlay) { DrawOverlay = request.Settings.BurnOverlay, Masks = request.Masks });
+                        request.Settings.Overlay) { DrawOverlay = request.Settings.BurnOverlay, Masks = request.Masks,
+                        View = camera.IsIdentity ? null : camera.ViewAt(request.Media.FrameTime(request.Start + count / request.Media.Fps)) });
                     byte[] pixels = BitmapPixels.Bgra(rendered);
                     await encoder.StandardInput.BaseStream.WriteAsync(pixels, ct).ConfigureAwait(false);
                     count++;

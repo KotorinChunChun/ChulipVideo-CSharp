@@ -15,7 +15,7 @@ public sealed class SettingsForm : BrandedForm
 
     public SettingsForm(AppSettings settings)
     {
-        Settings = settings with { Overlay = settings.Overlay with { }, Stability = settings.Stability with { }, Steps = settings.Steps with { }, Presets = settings.Presets.Select(x => x with { }).ToList() };
+        Settings = settings with { Overlay = settings.Overlay with { }, Stability = settings.Stability with { }, Steps = settings.Steps with { }, Zoom = settings.Zoom with { }, Presets = settings.Presets.Select(x => x with { }).ToList() };
         Text = WindowTitle.Create("詳細設定");
         StartPosition = FormStartPosition.CenterParent;
         MinimumSize = new Size(540, 420);
@@ -31,10 +31,12 @@ public sealed class SettingsForm : BrandedForm
         var subtitle = AddTab(tabs, "入力字幕");
         var theme = AddTab(tabs, "テーマ");
         var export = AddTab(tabs, "出力・FFmpeg");
+        var effects = AddTab(tabs, "演出");
         BuildPointer(pointer);
         BuildSubtitle(subtitle);
         BuildTheme(theme);
         BuildExport(export);
+        BuildEffects(effects);
         root.Controls.Add(tabs, 0, 0);
         preview.Paint += PaintPreview;
         preview.Resize += (_, _) => preview.Invalidate();
@@ -149,6 +151,23 @@ public sealed class SettingsForm : BrandedForm
         Row(table, "許す色の差 (0～255)", threshold);
         Row(table, "許す変化の割合 (%)", ratio);
         Note(table, "動画の圧縮で静止場面の画素がわずかに揺れても同じ画像とみなします。「完全一致」は全画素の一致だけを同じとみなします。");
+    }
+
+    private void BuildEffects(TableLayoutPanel table)
+    {
+        var o = Settings.Overlay;
+        Row(table, "ポインターの動き", Choice(o.PointerSmoothing, [("Off", "記録どおり"), ("Weak", "なめらか（直線）"), ("Strong", "なめらか（曲線・揺れを除く）")], x => o.PointerSmoothing = x));
+        Note(table, "記録の間隔が粗いときに、描くポインターの動きを補間します。クリックの前後0.1秒は記録どおりの位置に固定します。");
+        var z = Settings.Zoom;
+        Row(table, "動画にクリックのズームを付ける", Check(z.Enabled, x => z.Enabled = x));
+        Row(table, "ズーム倍率", Number((decimal)z.Scale, 1, 4, x => z.Scale = (double)x, 2, 0.1m));
+        Row(table, "クリックの何秒前から寄るか", Number((decimal)z.Lead, 0, 5, x => z.Lead = (double)x, 2, 0.1m));
+        Row(table, "最後のクリック後に保つ秒数", Number((decimal)z.Hold, 0, 10, x => z.Hold = (double)x, 2, 0.1m));
+        Row(table, "寄る時間 (秒)", Number((decimal)z.ZoomIn, 0.05m, 5, x => z.ZoomIn = (double)x, 2, 0.05m));
+        Row(table, "戻る時間 (秒)", Number((decimal)z.ZoomOut, 0.05m, 5, x => z.ZoomOut = (double)x, 2, 0.05m));
+        Row(table, "続けて寄る間隔 (秒)", Number((decimal)z.MergeGap, 0, 10, x => z.MergeGap = (double)x, 2, 0.1m));
+        Row(table, "中心の移動時間 (秒)", Number((decimal)z.Pan, 0.05m, 5, x => z.Pan = (double)x, 2, 0.05m));
+        Note(table, "MP4・GIFの書き出しで、クリックの位置へ滑らかに寄って戻ります。字幕は拡大しません。PNG連番と手順書には使いません。主画面の「演出を表示」で、写る範囲を枠で確認できます。");
     }
 
     private void BuildPointer(TableLayoutPanel table)

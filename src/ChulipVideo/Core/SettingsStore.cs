@@ -31,6 +31,10 @@ public sealed class SettingsStore(string? path = null)
             settings.Steps ??= new();
             settings.Steps.PreSeconds = FiniteClamp(settings.Steps.PreSeconds, 0, 5);
             settings.Steps.PostSeconds = FiniteClamp(settings.Steps.PostSeconds, 0, 5);
+            settings.Zoom ??= new();
+            var z = settings.Zoom;
+            z.Scale = FiniteClamp(z.Scale, 1, 4); z.Lead = FiniteClamp(z.Lead, 0, 5); z.Hold = FiniteClamp(z.Hold, 0, 10);
+            z.ZoomIn = FiniteClamp(z.ZoomIn, .05, 5); z.ZoomOut = FiniteClamp(z.ZoomOut, .05, 5); z.MergeGap = FiniteClamp(z.MergeGap, 0, 10); z.Pan = FiniteClamp(z.Pan, .05, 5);
             return settings;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or ArgumentException)
@@ -49,6 +53,7 @@ public sealed class SettingsStore(string? path = null)
         o.OffsetX=Math.Clamp(o.OffsetX,-8192,8192);o.OffsetY=Math.Clamp(o.OffsetY,-8192,8192);
         o.TextOffsetY=Math.Clamp(o.TextOffsetY,-100,100);o.PaddingY=Math.Clamp(o.PaddingY,0,100);
         o.PointerShape??="cursor";o.ClickShape??="circle";
+        o.PointerSmoothing=o.PointerSmoothing is "Weak" or "Strong" ? o.PointerSmoothing : "Off";
         o.FontFamily??="Yu Gothic UI";o.Horizontal??="center";o.Vertical??="bottom";
         // 設定画面と同じ#RRGGBBだけを受け付ける。手編集等の不正値は既定色へ戻す。
         o.PointerColor=ColorText.Normalize(o.PointerColor,"#202020");o.PointerFill=ColorText.Normalize(o.PointerFill,"",true);

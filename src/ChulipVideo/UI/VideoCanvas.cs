@@ -111,6 +111,16 @@ public sealed class VideoCanvas : Control
     public event EventHandler<MaskEditEventArgs>? MaskCommitted;
     public event EventHandler? MaskSelectionChanged;
 
+    private RectangleF? viewRect;
+
+    /// <summary>自動ズームで書き出しに写る範囲（元動画の座標）。nullなら描かない。</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public RectangleF? ViewRect
+    {
+        get => viewRect;
+        set { if (viewRect == value) return; viewRect = value; Invalidate(); }
+    }
+
     /// <summary>trueのとき、左ドラッグで切り出し枠ではなくマスクを作成・移動・変形する。</summary>
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public bool MaskMode
@@ -212,6 +222,14 @@ public sealed class VideoCanvas : Control
         if ((active || !maskMode && IsCropHovered) && color.ToArgb() == Color.DarkOrange.ToArgb()) color = Color.Red;
         using var cropPen = new Pen(color, 2) { DashStyle = active ? DashStyle.Solid : DashStyle.Dash };
         g.DrawRectangle(cropPen, cropRect.X, cropRect.Y, cropRect.Width, cropRect.Height);
+        if (ViewRect is RectangleF view)
+        {
+            var origin = Origin;
+            var rect = new RectangleF((float)(origin.X + view.X * FrameScale), (float)(origin.Y + view.Y * FrameScale), (float)(view.Width * FrameScale), (float)(view.Height * FrameScale));
+            using var viewPen = new Pen(Color.Gold, 2) { DashStyle = DashStyle.DashDot };
+            g.DrawRectangle(viewPen, rect.X, rect.Y, rect.Width, rect.Height);
+            TextRenderer.DrawText(g, "ズームで写る範囲", Font, new Point((int)rect.X + 2, (int)rect.Bottom - Font.Height - 2), Color.Gold, Color.FromArgb(32, 36, 43));
+        }
         if (maskMode) PaintMasks(g);
         else if (!SizeLocked)
         {

@@ -39,8 +39,35 @@ public static class OverlayRenderer
         catch { result.Dispose(); throw; }
     }
 
+    /// <summary>
+    /// 自動ズームの出力。クロップ画像（演出なし）のうち表示範囲viewを出力全体へ拡大し、ポインター・波紋は同じ倍率で、
+    /// 字幕は拡大せず出力の画面に固定して描く。viewは元動画の座標。
+    /// </summary>
+    public static Bitmap RenderView(Bitmap frame, CropRect crop, RectangleF view, double seconds, EventLog events, OverlayOptions options, bool overlay = true)
+    {
+        using Bitmap cropped = Render(frame, crop, seconds, events, options, false);
+        var result = new Bitmap(crop.Width, crop.Height, PixelFormat.Format32bppArgb);
+        try
+        {
+            using var graphics = Graphics.FromImage(result);
+            graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            graphics.PixelOffsetMode = PixelOffsetMode.Half;
+            using (var attributes = new ImageAttributes())
+            {
+                // 端の画素を折り返して補間し、拡大時に縁が黒くにじむのを防ぐ。
+                attributes.SetWrapMode(WrapMode.TileFlipXY);
+                graphics.DrawImage(cropped, new Rectangle(0, 0, crop.Width, crop.Height),
+                    view.X - crop.X, view.Y - crop.Y, view.Width, view.Height, GraphicsUnit.Pixel, attributes);
+            }
+            float s = crop.Width / view.Width;
+            if (overlay) Draw(graphics, seconds, events, options, s, crop.Height / view.Height, -view.X, -view.Y, new(0, 0, crop.Width, crop.Height), captionScale: 1);
+            return result;
+        }
+        catch { result.Dispose(); throw; }
+    }
+
     private static void Draw(Graphics graphics, double seconds, EventLog events, OverlayOptions options,
-        float sx, float sy, float offsetX, float offsetY, RectangleF captionArea)
+        float sx, float sy, float offsetX, float offsetY, RectangleF captionArea, float? captionScale = null)
     {
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
         graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
@@ -48,7 +75,8 @@ public static class OverlayRenderer
         InputEvent? current = events.AtOrBefore(seconds);
         if (current is not null)
         {
-            float x = (current.X + offsetX) * sx, y = (current.Y + offsetY) * sy;
+            var pointer = events.PointerAt(seconds, options.PointerSmoothing) ?? new PointF(current.X, current.Y);
+            float x = (pointer.X + offsetX) * sx, y = (pointer.Y + offsetY) * sy;
             if (options.ShowClicks)
             {
                 foreach (string button in EventLog.MouseButtons(current.Click))
@@ -68,7 +96,7 @@ public static class OverlayRenderer
                     ParseColor(options.PointerColor, Color.Black, true), ParseColor(options.PointerFill, Color.Empty, true),
                     Math.Max(.5f, options.PointerWidth * scale), 0);
         }
-        if (options.ShowKeys) DrawCaptions(graphics, seconds, events, options, scale, captionArea);
+        if (options.ShowKeys) DrawCaptions(graphics, seconds, events, options, captionScale ?? scale, captionArea);
     }
 
     private static void DrawCaptions(Graphics graphics, double seconds, EventLog events, OverlayOptions options, float scale, RectangleF area)

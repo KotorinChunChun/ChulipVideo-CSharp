@@ -92,6 +92,24 @@ public sealed record OverlayOptions
     public string Vertical { get; set; } = "bottom";
     public int OffsetX { get; set; }
     public int OffsetY { get; set; }
+    /// <summary>描くポインターの動き: Off（記録どおり）、Weak（直線で補間）、Strong（揺れを除いて曲線で補間）。</summary>
+    public string PointerSmoothing { get; set; } = "Off";
+}
+
+/// <summary>動画書き出しの自動ズーム（R6）。秒はクリックの時刻を基準にする。</summary>
+public sealed record ZoomSettings
+{
+    public bool Enabled { get; set; }
+    public double Scale { get; set; } = 1.6;
+    /// <summary>クリックの何秒前から寄り始めるか。</summary>
+    public double Lead { get; set; } = .6;
+    /// <summary>最後のクリックの後、何秒寄ったままにするか。</summary>
+    public double Hold { get; set; } = 1.2;
+    public double ZoomIn { get; set; } = .5;
+    public double ZoomOut { get; set; } = .6;
+    /// <summary>次のクリックまでがこの秒数以内なら、寄ったまま中心だけを移す。</summary>
+    public double MergeGap { get; set; } = 1.5;
+    public double Pan { get; set; } = .6;
 }
 
 /// <summary>静止判定・重複除外の許容差。0・0は完全一致。</summary>
@@ -130,6 +148,7 @@ public sealed record AppSettings
     public bool SkipDuplicates { get; set; } = true;
     public StabilitySettings Stability { get; set; } = new();
     public StepSettings Steps { get; set; } = new();
+    public ZoomSettings Zoom { get; set; } = new();
     public int PngCompression { get; set; } = 3;
     public bool BurnOverlay { get; set; }
     public bool ExportTsv { get; set; } = true;

@@ -99,7 +99,7 @@ public sealed partial class MainForm
         row.Controls.Add(play);
         row.Controls.Add(ActionButton("終了 ▶", () => Seek(rangeEnd), EndTone, "終了位置へ移動 (End)"));
         row.Controls.Add(ActionButton("末尾 ▶|", () => Seek(current?.LastFrameTime ?? 0), null, "動画の末尾 (Ctrl+End)"));
-        foreach (var check in new[] { range, loop, pingpong })
+        foreach (var check in new[] { range, loop, pingpong, showEffects })
         {
             check.Margin = new Padding(4, 5, 0, 0);
             row.Controls.Add(check);

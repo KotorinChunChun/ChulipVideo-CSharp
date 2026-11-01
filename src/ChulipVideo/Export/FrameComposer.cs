@@ -13,6 +13,8 @@ public sealed record RenderContext(CropRect Crop, double Time, EventLog Events, 
     public IReadOnlyList<Annotation> Annotations { get; init; } = [];
     /// <summary>注釈の番号バッジに描く手順番号。</summary>
     public int StepNumber { get; init; }
+    /// <summary>②の自動ズームで表示する範囲（元動画の座標）。nullまたはクロップと同じなら拡大しない。</summary>
+    public RectangleF? View { get; init; }
 }
 
 /// <summary>
@@ -26,7 +28,9 @@ public static class FrameComposer
     public static Bitmap Compose(Bitmap frame, RenderContext context)
     {
         using Bitmap? masked = Masked(frame, context, 1, 1);
-        var result = OverlayRenderer.Render(masked ?? frame, context.Crop, context.Time, context.Events, context.Options, context.DrawOverlay);
+        var result = context.View is RectangleF view && !IsWhole(view, context.Crop)
+            ? OverlayRenderer.RenderView(masked ?? frame, context.Crop, view, context.Time, context.Events, context.Options, context.DrawOverlay)
+            : OverlayRenderer.Render(masked ?? frame, context.Crop, context.Time, context.Events, context.Options, context.DrawOverlay);
         if (context.Annotations.Count == 0) return result;
         try
         {
@@ -43,6 +47,9 @@ public static class FrameComposer
         using Bitmap? masked = Masked(frame, context, (float)frame.Width / media.Width, (float)frame.Height / media.Height);
         return OverlayRenderer.RenderPreview(masked ?? frame, media, context.Time, context.Events, context.Options, context.Crop);
     }
+
+    private static bool IsWhole(RectangleF view, CropRect crop) =>
+        Math.Abs(view.X - crop.X) < .01 && Math.Abs(view.Y - crop.Y) < .01 && Math.Abs(view.Width - crop.Width) < .01 && Math.Abs(view.Height - crop.Height) < .01;
 
     // 元フレームはプレビューで使い回すため書き換えず、マスクがあるときだけ複製して描く。
     private static Bitmap? Masked(Bitmap frame, RenderContext context, float scaleX, float scaleY) =>

@@ -76,6 +76,11 @@ public sealed class EventLog
         return new(result);
     }
 
+    private PointerPath? pointerPath;
+
+    /// <summary>描くポインターの位置（元動画の座標）。最初の記録より前はnull。</summary>
+    public PointF? PointerAt(double seconds, string smoothing) => (pointerPath ??= new PointerPath(Events)).At(seconds, smoothing);
+
     public InputEvent? AtOrBefore(double seconds)
     {
         int lo = 0, hi = Events.Count - 1, found = -1;
@@ -148,6 +153,34 @@ public sealed class EventLog
         }));
         parts.AddRange(raw.Where(k => !order.Contains(k)));
         return parts.Any(p => !order.Contains(p)) ? string.Join(" + ", parts) : "";
+    }
+
+    /// <summary>
+    /// 切り出し開始を0秒・クロップ原点を(0,0)とする入力ログ。viewを渡すと（自動ズーム）、各行の時刻の表示範囲で
+    /// 出力動画の座標へ変換する（生成した動画を再編集してもポインターがずれない）。範囲外(-1)の座標はそのまま残す。
+    /// </summary>
+    public string ToTsv(double start, double end, double fps, CropRect crop, Func<double, RectangleF>? view)
+    {
+        if (view is null) return ToTsv(start, end, fps, crop);
+        var text = new StringBuilder("timestamp\tframe\tx\ty\tclick\tkeys\n");
+        foreach (var row in Rows(start, end))
+        {
+            double relative = Math.Max(0, row.Timestamp - start);
+            var v = view(row.Timestamp);
+            int x = row.X < 0 ? row.X : (int)Math.Round((row.X - v.X) * crop.Width / v.Width);
+            int y = row.Y < 0 ? row.Y : (int)Math.Round((row.Y - v.Y) * crop.Height / v.Height);
+            text.Append(CultureInfo.InvariantCulture, $"{relative:F3}\t{(int)Math.Floor(relative * fps + 1e-7)}\t{x}\t{y}\t{row.Click}\t{row.Keys}\n");
+        }
+        return text.ToString();
+    }
+
+    private List<InputEvent> Rows(double start, double end)
+    {
+        var rows = Events.Where(e => e.Timestamp >= start && e.Timestamp < end).ToList();
+        InputEvent? atStart = AtOrBefore(start);
+        if (atStart is not null && atStart.Timestamp < start && start < end)
+            rows.Insert(0, atStart with { Timestamp = start });
+        return rows;
     }
 
     public string ToTsv(double start, double end, double fps, CropRect crop)

@@ -59,7 +59,7 @@ public sealed partial class MainForm : BrandedForm
         start.ValueChanged+=(_,_)=>{if(!syncing)SetRange((double)start.Value,rangeEnd);};end.ValueChanged+=(_,_)=>{if(!syncing)SetRange(rangeStart,(double)end.Value);};position.ValueChanged+=(_,_)=>{if(!syncing)Seek((double)position.Value);};
         foreach(var editor in new[]{start,position,end})editor.Enter+=(_,_)=>StopPlaying();
         foreach(var n in new[]{cropX,cropY,cropW,cropH})n.ValueChanged+=(_,_)=>{if(!syncing)SetCrop(new((int)cropX.Value,(int)cropY.Value,(int)cropW.Value,(int)cropH.Value));};
-        canvas.CropChanged+=(_,_)=>{SyncCrop();Redraw();};canvas.CropCommitted+=(_,_)=>RememberCrop();canvas.ViewChanged+=(_,_)=>UpdateInfo();
+        canvas.CropChanged+=(_,_)=>{SyncCrop();Redraw();SyncEffects();};canvas.CropCommitted+=(_,_)=>RememberCrop();canvas.ViewChanged+=(_,_)=>UpdateInfo();
         outside.CheckedChanged+=(_,_)=>{canvas.AllowOutside=outside.Checked;if(!syncing)SetCrop(canvas.Crop);};
         moveLock.CheckedChanged+=(_,_)=>{canvas.MoveLocked=moveLock.Checked;cropX.Enabled=cropY.Enabled=!moveLock.Checked;};
         sizeLock.CheckedChanged+=(_,_)=>{canvas.SizeLocked=sizeLock.Checked;cropW.Enabled=cropH.Enabled=presets.Enabled=!sizeLock.Checked;};
@@ -74,7 +74,7 @@ public sealed partial class MainForm : BrandedForm
         DragEnter+=(_,e)=>e.Effect=e.Data?.GetDataPresent(DataFormats.FileDrop)==true?DragDropEffects.Copy:DragDropEffects.None;
         DragDrop+=(_,e)=>{if(e.Data?.GetData(DataFormats.FileDrop) is string[] paths && paths.Length>0&&!exporting&&!loading)RunUiAsync(()=>LoadAsync(paths[0]));};
         timer.Tick+=(_,_)=>PlaybackTick(); timer.Start();
-        InitializeMasks();ApplySettings();
+        InitializeMasks();InitializeEffects();ApplySettings();
         Shown+=(_,_)=>{if(store.Warning is not null)Status(store.Warning);var path=video??settings.LastVideoPath;if(File.Exists(path))RunUiAsync(()=>LoadAsync(path));};
     }
 
@@ -127,7 +127,7 @@ public sealed partial class MainForm : BrandedForm
         bool wasSyncing=syncing;syncing=true;
         try{start.Value=(decimal)rangeStart;position.Value=(decimal)currentTime;end.Value=(decimal)rangeEnd;}
         finally{syncing=wasSyncing;}
-        timeline.Duration=current?.Duration??0;timeline.Start=rangeStart;timeline.End=rangeEnd;timeline.Position=currentTime;timeline.Invalidate();UpdateInfo();SyncMasks();
+        timeline.Duration=current?.Duration??0;timeline.Start=rangeStart;timeline.End=rangeEnd;timeline.Position=currentTime;timeline.Invalidate();UpdateInfo();SyncMasks();SyncEffects();
     }
     private void RequestFrame(){seekVersion++;if(!rendering)RunUiAsync(RenderLoopAsync);}
     private async Task RenderLoopAsync()
@@ -234,7 +234,7 @@ public sealed partial class MainForm : BrandedForm
     }
     private void TrySaveApp(){try{store.Save(settings);}catch(Exception ex) when(ex is IOException or UnauthorizedAccessException){Status("設定を保存できません: "+ex.Message);}}
     private void OpenSettings()
-    {StopPlaying();using var form=new SettingsForm(settings);if(form.ShowDialog(this)==DialogResult.OK){settings=form.Settings;ApplySettings();TrySaveApp();Redraw();}}
+    {StopPlaying();using var form=new SettingsForm(settings);if(form.ShowDialog(this)==DialogResult.OK){settings=form.Settings;ApplySettings();TrySaveApp();Redraw();SyncEffects();}}
     private void ApplySettings()
     {
         bool wasSyncing=syncing;syncing=true;
