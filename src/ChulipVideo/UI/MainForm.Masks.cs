@@ -39,6 +39,7 @@ public sealed partial class MainForm
         };
         canvas.MaskEdited += (_, e) => { if (e.Index < visibleMasks.Count) { visibleMasks[e.Index].Rect = e.Rect; Redraw(); } };
         maskMenu.Items.Add("マスク一覧…", null, (_, _) => OpenMaskList());
+        maskMenu.Items.Add("マスク候補を検出（OCR）…", null, (_, _) => BeginMaskSuggestion());
         maskMenu.Items.Add("選択したマスクを削除 (Delete)", null, (_, _) => DeleteSelectedMask());
         maskMenu.Items.Add("現在位置を開始に", null, (_, _) => SetSelectedMaskTime(end: false));
         maskMenu.Items.Add("現在位置を終了に", null, (_, _) => SetSelectedMaskTime(end: true));
@@ -86,6 +87,36 @@ public sealed partial class MainForm
         masks = form.Masks;
         canvas.SelectedMask = -1;
         SyncMasks(); Redraw();
+    }
+
+    /// <summary>トリミング範囲を2秒おきに読み取り、機密らしい文字を無効のマスク候補として加えてから、一覧で承認してもらう（R9）。</summary>
+    private void BeginMaskSuggestion()
+    {
+        if (current is null || media is null || exporting || loading) return;
+        if (Recognition.OcrService.Unavailable() is string reason) { MessageBox.Show(this, reason, WindowTitle.Create("マスク候補"), MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        StopPlaying();
+        exportCancel = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); exporting = true; SetBusy(true); cancel.Enabled = true;
+        exportTask = SuggestMasksAsync(current, media, rangeStart, rangeEnd, [.. settings.Recognition.Keywords], exportCancel.Token);
+    }
+
+    private async Task SuggestMasksAsync(MediaInfo source, Media.FfmpegService service, double start, double end, string[] keywords, CancellationToken token)
+    {
+        List<MaskRegion>? found = null;
+        try { found = await Recognition.MaskSuggester.SuggestAsync(service, source, start, end, keywords, new Progress<string>(m => { if (!closing) Status(m); }), token); }
+        catch (OperationCanceledException) { if (!closing) Status("マスク候補の検出を中断しました。"); }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException or System.Runtime.InteropServices.COMException) { if (!closing) ShowError(ex); }
+        finally
+        {
+            exporting = false; exportCancel?.Dispose(); exportCancel = null;
+            if (!closing) { cancel.Enabled = false; SetBusy(false); }
+        }
+        if (closing || found is null || current != source) return;
+        // 既に同じ位置・時間を覆う有効なマスクがある候補は加えない。
+        var added = found.Where(f => !masks.Any(m => m.Enabled && m.Start <= f.Start && m.End >= f.End && m.Rect.Rectangle.Contains(f.Rect.Rectangle))).ToList();
+        masks.AddRange(added);
+        SyncMasks(); Redraw();
+        Status(added.Count == 0 ? "マスク候補は見つかりませんでした。" : $"マスク候補 {added.Count} 件を無効の状態で追加しました。一覧で確かめて有効にしてください。");
+        if (added.Count > 0) OpenMaskList();
     }
 
     /// <summary>出力（コピー・PNG・書き出し・手順書）に渡すマスク。編集中の変更が出力へ混ざらないよう複製する。</summary>

@@ -145,6 +145,13 @@ public sealed record IdleSettings
     [System.Text.Json.Serialization.JsonIgnore] public bool Enabled => Mode is "Cut" or "Speed";
 }
 
+/// <summary>文字認識（R9）の設定。</summary>
+public sealed record RecognitionSettings
+{
+    /// <summary>マスク候補として探す語（顧客名など）。</summary>
+    public List<string> Keywords { get; set; } = [];
+}
+
 /// <summary>静止判定・重複除外の許容差。0・0は完全一致。</summary>
 public sealed record StabilitySettings
 {
@@ -183,6 +190,7 @@ public sealed record AppSettings
     public StepSettings Steps { get; set; } = new();
     public ZoomSettings Zoom { get; set; } = new();
     public IdleSettings Idle { get; set; } = new();
+    public RecognitionSettings Recognition { get; set; } = new();
     public int PngCompression { get; set; } = 3;
     public bool BurnOverlay { get; set; }
     public bool ExportTsv { get; set; } = true;

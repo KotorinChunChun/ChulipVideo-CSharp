@@ -81,7 +81,7 @@ public sealed class StepEditorForm : BrandedForm
             Tool("再検出", Redetect, "入力ログから手順を作り直す"), Tool("追加", AddAtCurrent, "主画面の現在位置に手順を追加"),
             Tool("削除", DeleteSelected, "選択した手順を削除 (Delete)"), Tool("結合", MergeSelected, "選択した手順を1つにまとめる"),
             Tool("↑", () => MoveSelected(-1), "上へ移動"), Tool("↓", () => MoveSelected(1), "下へ移動"),
-            Tool("自動配置", AutoAnnotate, "選択した手順の注釈を自動配置し直す"), Tool("書き出し…", ExportDocument, "Markdown・HTML・Word・PDFの手順書を書き出す"),
+            Tool("OCR説明", DescribeWithOcr, "選択した手順（未選択なら全手順）の対象名を文字認識で読み、説明文と強調枠にする"), Tool("書き出し…", ExportDocument, "Markdown・HTML・Word・PDFの手順書を書き出す"),
             Tool("保存", () => Save(), "手順ファイルへ保存 (Ctrl+S)"), cancel
         ]);
         root.Controls.Add(toolbar, 0, 0);
@@ -341,12 +341,29 @@ public sealed class StepEditorForm : BrandedForm
         }
         preview.ToolCompleted += (_, _) => buttons[0].Checked = true;
         row.Controls.Add(Tool("削除", preview.DeleteSelected, "選択した注釈を削除 (Delete)"));
+        row.Controls.Add(Tool("自動配置", AutoAnnotate, "選択した手順の注釈を自動配置し直す"));
         editors.Add(row);
         return row;
     }
 
     /// <summary>除外した手順を数えない、手順書での番号。</summary>
     private int NumberOf(StepItem step) => Document.Steps.TakeWhile(s => !ReferenceEquals(s, step)).Count(s => s.Enabled) + 1;
+
+    private void DescribeWithOcr()
+    {
+        if (Recognition.OcrService.Unavailable() is string reason) { MessageBox.Show(this, reason, Text, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        var targets = (list.SelectedIndices.Count > 0 ? list.SelectedIndices.Cast<int>().Select(i => Document.Steps[i]) : Document.Steps).ToArray();
+        if (targets.Length == 0) { Status("手順がありません。"); return; }
+        int select = list.SelectedIndices.Count > 0 ? list.SelectedIndices[0] : 0;
+        _ = RunAsync("文字を読み取っています…", async token =>
+        {
+            int updated = await Recognition.StepRecognizer.DescribeAsync(media, info, events, targets, settings, masks, new Progress<string>(Status), token);
+            if (IsDisposed) return;
+            if (updated > 0) MarkDirty();
+            RefreshList(select);
+            Status($"{updated} 件の手順を、読み取った対象名の説明文にしました（{targets.Length - updated} 件は対象名を読み取れないか、キー操作です）。");
+        });
+    }
 
     private void AutoAnnotate()
     {

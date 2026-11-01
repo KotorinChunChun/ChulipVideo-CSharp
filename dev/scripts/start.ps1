@@ -7,6 +7,6 @@ if (!$Ffmpeg -and (Test-Path (Join-Path $root '.local/ffmpeg.exe'))) { $Ffmpeg=J
 if ($Ffmpeg) { $appArgs+=@('--ffmpeg',('"'+$Ffmpeg+'"')) }
 if ($Settings) { $appArgs+=@('--settings',('"'+$Settings+'"')) }
 if ($Video) { $appArgs+=@('--video',('"'+$Video+'"')) }
-$launch=@{FilePath=(Join-Path $root 'src/ChulipVideo/bin/Debug/net10.0-windows/ChulipVideo.exe');WorkingDirectory=$root}
+$launch=@{FilePath=(Join-Path $root 'src/ChulipVideo/bin/Debug/net10.0-windows10.0.19041.0/ChulipVideo.exe');WorkingDirectory=$root}
 if($appArgs.Count) {$launch.ArgumentList=$appArgs}
 Start-Process @launch

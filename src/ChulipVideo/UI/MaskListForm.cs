@@ -40,7 +40,8 @@ public sealed class MaskListForm : BrandedForm
             new DataGridViewComboBoxColumn { HeaderText = "方式", Width = 96, DataSource = Modes.Select(m => m.Label).ToArray() },
             new DataGridViewTextBoxColumn { HeaderText = "強さ(px)", Width = 70 },
             new DataGridViewTextBoxColumn { HeaderText = "色", Width = 80 },
-            new DataGridViewTextBoxColumn { HeaderText = "メモ", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill }
+            new DataGridViewTextBoxColumn { HeaderText = "メモ", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill },
+            new DataGridViewTextBoxColumn { HeaderText = "出どころ", Width = 72, ReadOnly = true }
         ]);
         grid.CellValidating += ValidateCell;
         grid.CellEndEdit += (_, e) => ApplyRow(e.RowIndex);
@@ -49,7 +50,7 @@ public sealed class MaskListForm : BrandedForm
         root.Controls.Add(grid, 0, 0);
         root.Controls.Add(new Label
         {
-            Text = "時刻は秒または時:分:秒で入力します。終了の時刻は含みません。機密情報には、復元されにくい「塗りつぶし」を使ってください。「ぼかし」は細部を推測される場合があります。",
+            Text = "時刻は秒または時:分:秒で入力します。終了の時刻は含みません。OCR候補は無効の状態で追加されます。内容を確かめ、「有効」にしたものだけが映像にかかります。機密情報には、復元されにくい「塗りつぶし」を使ってください。「ぼかし」は細部を推測される場合があります。",
             AutoSize = true, Dock = DockStyle.Fill, ForeColor = SystemColors.GrayText, Padding = new Padding(0, 4, 0, 4)
         }, 0, 1);
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false };
@@ -86,7 +87,7 @@ public sealed class MaskListForm : BrandedForm
         {
             var m = Masks[i];
             grid.Rows.Add(m.Enabled, (i + 1).ToString(CultureInfo.InvariantCulture), Time(m.Start), Time(m.End),
-                Modes.First(x => x.Mode == m.Mode).Label, m.Strength.ToString(CultureInfo.InvariantCulture), m.Color, m.Note);
+                Modes.First(x => x.Mode == m.Mode).Label, m.Strength.ToString(CultureInfo.InvariantCulture), m.Color, m.Note, m.Source == "Suggested" ? "OCR候補" : "手動");
         }
     }
 

@@ -31,6 +31,8 @@ public sealed class SettingsStore(string? path = null)
             settings.Steps ??= new();
             settings.Steps.PreSeconds = FiniteClamp(settings.Steps.PreSeconds, 0, 5);
             settings.Steps.PostSeconds = FiniteClamp(settings.Steps.PostSeconds, 0, 5);
+            settings.Recognition ??= new();
+            settings.Recognition.Keywords = (settings.Recognition.Keywords ?? []).Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k.Trim()).Distinct().Take(200).ToList();
             settings.Idle ??= new();
             var idle = settings.Idle;
             idle.Mode = idle.Mode is "Cut" or "Speed" ? idle.Mode : "Off";

@@ -15,7 +15,7 @@ public sealed class SettingsForm : BrandedForm
 
     public SettingsForm(AppSettings settings)
     {
-        Settings = settings with { Overlay = settings.Overlay with { }, Stability = settings.Stability with { }, Steps = settings.Steps with { }, Zoom = settings.Zoom with { }, Idle = settings.Idle with { }, Presets = settings.Presets.Select(x => x with { }).ToList() };
+        Settings = settings with { Overlay = settings.Overlay with { }, Stability = settings.Stability with { }, Steps = settings.Steps with { }, Zoom = settings.Zoom with { }, Idle = settings.Idle with { }, Recognition = settings.Recognition with { Keywords = [.. settings.Recognition.Keywords] }, Presets = settings.Presets.Select(x => x with { }).ToList() };
         Text = WindowTitle.Create("詳細設定");
         StartPosition = FormStartPosition.CenterParent;
         MinimumSize = new Size(540, 420);
@@ -32,11 +32,13 @@ public sealed class SettingsForm : BrandedForm
         var theme = AddTab(tabs, "テーマ");
         var export = AddTab(tabs, "出力・FFmpeg");
         var effects = AddTab(tabs, "演出");
+        var recognition = AddTab(tabs, "認識・AI");
         BuildPointer(pointer);
         BuildSubtitle(subtitle);
         BuildTheme(theme);
         BuildExport(export);
         BuildEffects(effects);
+        BuildRecognition(recognition);
         root.Controls.Add(tabs, 0, 0);
         preview.Paint += PaintPreview;
         preview.Resize += (_, _) => preview.Invalidate();
@@ -174,6 +176,16 @@ public sealed class SettingsForm : BrandedForm
         Row(table, "前後に残す秒数", Number((decimal)idle.Margin, 0, 10, x => idle.Margin = (double)x, 2, 0.1m));
         Row(table, "早送りの倍率", Number((decimal)idle.Speed, 1.5m, 64, x => idle.Speed = (double)x, 1, 0.5m));
         Note(table, "入力も画面の変化もない区間を、MP4・GIFの書き出しでカットまたは早送りします。字幕・TSVの時刻も出力に合わせます。主画面の「演出を表示」で、対象の区間をタイムラインに斜線で表示します。");
+    }
+
+    private void BuildRecognition(TableLayoutPanel table)
+    {
+        string? unavailable = Recognition.OcrService.Unavailable();
+        Row(table, "文字認識（OCR）", new Label { AutoSize = true, Text = unavailable ?? $"利用できます（言語: {Recognition.OcrService.LanguageTag}、オフライン）" });
+        var keywords = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, Height = 90, Dock = DockStyle.Fill, AccessibleName = "マスク候補として探す語", Text = string.Join(Environment.NewLine, Settings.Recognition.Keywords) };
+        keywords.TextChanged += (_, _) => Settings.Recognition.Keywords = keywords.Lines.Select(l => l.Trim()).Where(l => l.Length > 0).Distinct().ToList();
+        Row(table, "マスク候補として探す語（1行に1つ）", keywords);
+        Note(table, "手順書エディターの「OCR説明」はクリックした位置の文字を読み、「『保存』をクリックします。」のような説明文にします。マスクの右クリックメニューの「マスク候補を検出（OCR）」は、メールアドレス・電話番号・郵便番号・13〜16桁の数字・上の語を探し、無効の候補として追加します。読み取りはWindows内で行い、外部へ送りません。");
     }
 
     private void BuildPointer(TableLayoutPanel table)
