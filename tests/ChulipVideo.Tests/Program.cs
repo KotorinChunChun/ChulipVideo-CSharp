@@ -13,6 +13,7 @@ ChulipVideo.Tests.EffectsTests.Run(Path.Combine(args.Length >= 2 ? args[1] : Pat
 ChulipVideo.Tests.IdleTests.Run(Path.Combine(args.Length >= 2 ? args[1] : Path.GetTempPath(), "chulip-idle-tests"));
 ChulipVideo.Tests.ClipTests.Run(Path.Combine(args.Length >= 2 ? args[1] : Path.GetTempPath(), "chulip-clip-tests"));
 await ChulipVideo.Tests.RecognitionTests.RunAsync(Path.Combine(args.Length >= 2 ? args[1] : Path.GetTempPath(), "chulip-recognition-tests"));
+await ChulipVideo.Tests.AiTests.RunAsync(Path.Combine(args.Length >= 2 ? args[1] : Path.GetTempPath(), "chulip-ai-tests"));
 if(args.Length>=2)
 {
     Directory.CreateDirectory(args[1]);
@@ -27,4 +28,5 @@ if(args.Length>=2)
     await ChulipVideo.Tests.IdleTests.RunMediaAsync(args[0],args[1]);
     await ChulipVideo.Tests.ClipTests.RunMediaAsync(args[0],args[1]);
     await ChulipVideo.Tests.RecognitionTests.RunMediaAsync(args[0],args[1]);
+    await ChulipVideo.Tests.AiTests.RunMediaAsync(args[0],args[1]);
 }

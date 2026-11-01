@@ -152,6 +152,21 @@ public sealed record RecognitionSettings
     public List<string> Keywords { get; set; } = [];
 }
 
+/// <summary>AIによる説明文（R10）。既定では使わない。APIキーは設定ファイルではなくWindows資格情報マネージャーへ保存する。</summary>
+public sealed record AiSettings
+{
+    public bool Enabled { get; set; }
+    public string Model { get; set; } = "claude-opus-5-5";
+}
+
+/// <summary>MP4のナレーション（R10）。保存済みの手順の説明文を、Windows標準の音声合成で読み上げる。</summary>
+public sealed record NarrationSettings
+{
+    public bool Enabled { get; set; }
+    public string VoiceId { get; set; } = "";
+    public double Rate { get; set; } = 1;
+}
+
 /// <summary>静止判定・重複除外の許容差。0・0は完全一致。</summary>
 public sealed record StabilitySettings
 {
@@ -191,6 +206,8 @@ public sealed record AppSettings
     public ZoomSettings Zoom { get; set; } = new();
     public IdleSettings Idle { get; set; } = new();
     public RecognitionSettings Recognition { get; set; } = new();
+    public AiSettings Ai { get; set; } = new();
+    public NarrationSettings Narration { get; set; } = new();
     public int PngCompression { get; set; } = 3;
     public bool BurnOverlay { get; set; }
     public bool ExportTsv { get; set; } = true;
@@ -206,6 +223,8 @@ public enum ExportKind { PngSequence, Mp4, Gif }
 public sealed record ExportRequest(MediaInfo Media, CropRect Crop, double Start, double End, string OutputPath, ExportKind Kind, AppSettings Settings)
 {
     public IReadOnlyList<MaskRegion> Masks { get; init; } = [];
+    /// <summary>MP4に入れるナレーション（元動画の時刻と読み上げる文）。空なら音声なし。</summary>
+    public IReadOnlyList<(double Time, string Text)> Narration { get; init; } = [];
 }
 public sealed record ExportProgress(int Completed, int Total, string Message);
 public sealed record ExportResult(string OutputPath, int FrameCount);

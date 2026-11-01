@@ -31,6 +31,11 @@ public sealed class SettingsStore(string? path = null)
             settings.Steps ??= new();
             settings.Steps.PreSeconds = FiniteClamp(settings.Steps.PreSeconds, 0, 5);
             settings.Steps.PostSeconds = FiniteClamp(settings.Steps.PostSeconds, 0, 5);
+            settings.Ai ??= new();
+            settings.Ai.Model = string.IsNullOrWhiteSpace(settings.Ai.Model) ? "claude-opus-5-5" : settings.Ai.Model.Trim();
+            settings.Narration ??= new();
+            settings.Narration.VoiceId ??= "";
+            settings.Narration.Rate = FiniteClamp(settings.Narration.Rate, .5, 3);
             settings.Recognition ??= new();
             settings.Recognition.Keywords = (settings.Recognition.Keywords ?? []).Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k.Trim()).Distinct().Take(200).ToList();
             settings.Idle ??= new();

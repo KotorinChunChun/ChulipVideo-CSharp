@@ -63,12 +63,29 @@ public sealed class ExportService(FfmpegService media)
                 timeMap = new TimeMap(request.Start, request.End, IdleDetector.Detect(events, profile, request.Settings.Idle), request.Settings.Idle);
                 total = Math.Max(1, (int)Math.Ceiling(timeMap.OutputDuration * request.Media.Fps - 1e-7));
             }
+            // ナレーション（MP4のみ）は説明文を読み上げ、出力の時刻に並べた1本の音声にする。
+            string? narration = null;
+            if (request.Kind == ExportKind.Mp4 && request.Narration.Count > 0)
+            {
+                var clips = new List<(double, Audio.PcmWave)>();
+                foreach (var (time, text) in request.Narration.Where(n => n.Time >= request.Start && n.Time < request.End && !string.IsNullOrWhiteSpace(n.Text)))
+                {
+                    progress?.Report(new(0, total, $"ナレーションを作成しています… {clips.Count + 1}"));
+                    var wave = Audio.PcmWave.Parse(await Audio.NarrationService.SynthesizeAsync(text, request.Settings.Narration.VoiceId, request.Settings.Narration.Rate, ct).ConfigureAwait(false));
+                    clips.Add((timeMap.ToOutput(time), wave));
+                }
+                if (clips.Count > 0)
+                {
+                    narration = Path.Combine(stage, "narration.wav");
+                    await File.WriteAllBytesAsync(narration, Audio.NarrationService.Mix(clips).ToBytes(), ct).ConfigureAwait(false);
+                }
+            }
             if (request.Kind == ExportKind.PngSequence)
             {
                 Directory.CreateDirectory(stagedTarget);
                 count = await ExportPngAsync(request, events, stagedTarget, total, progress, ct).ConfigureAwait(false);
             }
-            else count = await ExportMovieAsync(request, events, camera, timeMap, stage, stagedTarget, total, progress, ct).ConfigureAwait(false);
+            else count = await ExportMovieAsync(request, events, camera, timeMap, narration, stage, stagedTarget, total, progress, ct).ConfigureAwait(false);
 
             string sidecarBase = request.Kind == ExportKind.PngSequence
                 ? Path.Combine(stagedTarget, "operations") : Path.Combine(stage, Path.GetFileNameWithoutExtension(target));
@@ -145,7 +162,7 @@ public sealed class ExportService(FfmpegService media)
         finally { current?.Dispose(); next?.Dispose(); }
     }
 
-    private async Task<int> ExportMovieAsync(ExportRequest request, EventLog events, CameraTrack camera, TimeMap timeMap, string stage, string output, int total, IProgress<ExportProgress>? progress, CancellationToken ct)
+    private async Task<int> ExportMovieAsync(ExportRequest request, EventLog events, CameraTrack camera, TimeMap timeMap, string? narration, string stage, string output, int total, IProgress<ExportProgress>? progress, CancellationToken ct)
     {
         bool gif = request.Kind == ExportKind.Gif;
         string encoded = gif ? Path.Combine(stage, "rendered.nut") : output;
@@ -153,8 +170,11 @@ public sealed class ExportService(FfmpegService media)
         {
             "-hide_banner", "-loglevel", "error", "-nostdin", "-n", "-f", "rawvideo", "-pixel_format", "bgra",
             "-video_size", $"{request.Crop.Width}x{request.Crop.Height}", "-framerate", request.Media.Fps.ToString("R", CultureInfo.InvariantCulture),
-            "-i", "pipe:0", "-an"
+            "-i", "pipe:0"
         };
+        // 音声はナレーションだけ。動画より長い分は切る。
+        if (narration is null) args.Add("-an");
+        else args.AddRange(["-i", narration, "-map", "0:v", "-map", "1:a", "-c:a", "aac", "-b:a", "128k", "-shortest"]);
         if (gif) args.AddRange(["-c:v", "ffv1", "-level", "3", "-pix_fmt", "bgra"]);
         else args.AddRange(["-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt",
             request.Crop.Width % 2 == 0 && request.Crop.Height % 2 == 0 ? "yuv420p" : "yuv444p", "-movflags", "+faststart"]);

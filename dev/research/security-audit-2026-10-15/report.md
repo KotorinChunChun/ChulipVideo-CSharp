@@ -18,3 +18,14 @@ FFmpeg引数は`ArgumentList`、`UseShellExecute=false`（同ファイル:26）�
 - [x] 攻撃面/改善案/保留理由の記録、レポート差分検査。
 - 製品コードの変更なし。文書のみのため形式的なビルド・GUI試験は実行しない。
 - 実ユーザー動画、破損codecのfuzz、別ユーザーIPC、FFmpeg実バイナリの監査は未実施。導入・公開・親gitlink変更なし。
+
+## 追記 2026-11-01 依存の追加（v0.2.2 P9）
+
+AIによる説明文（既定は無効）のため、製品csprojに初めて外部PackageReferenceを追加した。
+
+| パッケージ | 版 | 経路 | 用途 |
+| --- | --- | --- | --- |
+| Anthropic | 13.3.0 | 直接 | Claude APIの呼び出し（AI機能の中だけ） |
+| Microsoft.Extensions.AI.Abstractions | 10.5.1 | 推移 | Anthropicが参照 |
+
+`dotnet list package --vulnerable --include-transitive`で既知の脆弱性なし（2026-11-01、nuget.org）。APIキーはWindows資格情報マネージャーに保存し、設定ファイル・ログへ書かない。送信は利用者が有効にし、実行ごとに確認した場合だけで、送る画像はマスク適用後に限る。OCR・音声合成はWindows標準の機能でオフラインに動き、外部へ送らない。

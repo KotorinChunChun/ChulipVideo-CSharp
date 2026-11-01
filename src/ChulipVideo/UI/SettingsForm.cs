@@ -15,7 +15,7 @@ public sealed class SettingsForm : BrandedForm
 
     public SettingsForm(AppSettings settings)
     {
-        Settings = settings with { Overlay = settings.Overlay with { }, Stability = settings.Stability with { }, Steps = settings.Steps with { }, Zoom = settings.Zoom with { }, Idle = settings.Idle with { }, Recognition = settings.Recognition with { Keywords = [.. settings.Recognition.Keywords] }, Presets = settings.Presets.Select(x => x with { }).ToList() };
+        Settings = settings with { Overlay = settings.Overlay with { }, Stability = settings.Stability with { }, Steps = settings.Steps with { }, Zoom = settings.Zoom with { }, Idle = settings.Idle with { }, Recognition = settings.Recognition with { Keywords = [.. settings.Recognition.Keywords] }, Ai = settings.Ai with { }, Narration = settings.Narration with { }, Presets = settings.Presets.Select(x => x with { }).ToList() };
         Text = WindowTitle.Create("詳細設定");
         StartPosition = FormStartPosition.CenterParent;
         MinimumSize = new Size(540, 420);
@@ -186,6 +186,40 @@ public sealed class SettingsForm : BrandedForm
         keywords.TextChanged += (_, _) => Settings.Recognition.Keywords = keywords.Lines.Select(l => l.Trim()).Where(l => l.Length > 0).Distinct().ToList();
         Row(table, "マスク候補として探す語（1行に1つ）", keywords);
         Note(table, "手順書エディターの「OCR説明」はクリックした位置の文字を読み、「『保存』をクリックします。」のような説明文にします。マスクの右クリックメニューの「マスク候補を検出（OCR）」は、メールアドレス・電話番号・郵便番号・13〜16桁の数字・上の語を探し、無効の候補として追加します。読み取りはWindows内で行い、外部へ送りません。");
+        var ai = Settings.Ai;
+        Row(table, "AIで説明文を作る（Claude）", Check(ai.Enabled, x => ai.Enabled = x));
+        var model = new TextBox { Text = ai.Model, Width = 220, AccessibleName = "AIのモデル" };
+        model.TextChanged += (_, _) => ai.Model = model.Text.Trim();
+        Row(table, "モデル", model);
+        var keyState = new Label { AutoSize = true };
+        void ShowKey() => keyState.Text = Ai.CredentialStore.Read(Ai.CredentialStore.AnthropicTarget) is not null ? "APIキー: Windows資格情報マネージャーに保存済み"
+            : string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")) ? "APIキー: 未設定" : "APIキー: 環境変数 ANTHROPIC_API_KEY を使用";
+        var save = new Button { Text = "APIキーを保存…", AutoSize = true };
+        save.Click += (_, _) => { if (AskSecret() is string secret) { Ai.CredentialStore.Write(Ai.CredentialStore.AnthropicTarget, secret); ShowKey(); } };
+        var remove = new Button { Text = "削除", AutoSize = true };
+        remove.Click += (_, _) => { Ai.CredentialStore.Delete(Ai.CredentialStore.AnthropicTarget); ShowKey(); };
+        var keyRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Fill, Margin = Padding.Empty };
+        keyRow.Controls.AddRange([save, remove, keyState]);
+        ShowKey();
+        Row(table, "APIキー", keyRow);
+        Note(table, "既定では使いません。手順書エディターの「説明文」→「AIで作る」を実行するたびに、送る枚数と内容を確認します。送るのはマスク・注釈を適用した手順の画像と、操作の種類・説明文だけです。業務画面を外部へ送るため、社内規程を確認してから有効にしてください。APIキーは設定ファイルに保存しません。");
+        var narration = Settings.Narration;
+        Row(table, "MP4にナレーションを入れる", Check(narration.Enabled, x => narration.Enabled = x));
+        var voices = Audio.NarrationService.Voices();
+        (string Key, string Label)[] voiceItems = [("", "日本語の既定の音声"), .. voices.Select(v => (v.Id, $"{v.Name}（{v.Language}）"))];
+        Row(table, "音声", Choice(narration.VoiceId, voiceItems, x => narration.VoiceId = x));
+        Row(table, "話す速さ（倍）", Number((decimal)narration.Rate, 0.5m, 3, x => narration.Rate = (double)x, 1, 0.1m));
+        Note(table, Audio.NarrationService.Unavailable() ?? "保存済みの手順の説明文を、Windows標準の音声合成（オフライン）で手順の時刻に読み上げ、MP4の音声にします。前の読み上げと重なる場合は後ろへずらします。");
+    }
+
+    private string? AskSecret()
+    {
+        using var dialog = new BrandedForm { Text = WindowTitle.Create("APIキーの保存"), ClientSize = new Size(420, 110), StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false, ShowInTaskbar = false };
+        var text = new TextBox { Location = new Point(12, 14), Width = 396, UseSystemPasswordChar = true, AccessibleName = "Anthropic APIキー" };
+        var ok = new Button { Text = "保存", DialogResult = DialogResult.OK, Location = new Point(236, 62), Size = new Size(80, 30) };
+        var no = new Button { Text = "キャンセル", DialogResult = DialogResult.Cancel, Location = new Point(326, 62), Size = new Size(82, 30) };
+        dialog.Controls.AddRange([text, ok, no]); dialog.AcceptButton = ok; dialog.CancelButton = no;
+        return dialog.ShowDialog(this) == DialogResult.OK && text.Text.Trim().Length > 0 ? text.Text.Trim() : null;
     }
 
     private void BuildPointer(TableLayoutPanel table)

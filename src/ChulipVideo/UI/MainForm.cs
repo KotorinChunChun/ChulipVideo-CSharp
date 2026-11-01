@@ -291,7 +291,7 @@ public sealed partial class MainForm : BrandedForm
         if(kind==ExportKind.PngSequence){using var dialog=new FolderBrowserDialog{Description="PNG連番を保存する親フォルダー",UseDescriptionForTitle=true};if(dialog.ShowDialog(this)!=DialogResult.OK)return;outputPath=Path.Combine(dialog.SelectedPath,$"{Path.GetFileNameWithoutExtension(current.Path)}_crops_{DateTime.Now:yyyyMMdd_HHmmss_fff}");}
         else{var ext=kind==ExportKind.Mp4?"mp4":"gif";using var dialog=SaveDialog($"{ext.ToUpperInvariant()}|*.{ext}",$"{Path.GetFileNameWithoutExtension(current.Path)}_clip_{DateTime.Now:HHmmss}.{ext}",null);if(dialog.ShowDialog(this)!=DialogResult.OK)return;if(File.Exists(dialog.FileName)){MessageBox.Show(this,"既存ファイルを保護するため、新しい名前を指定してください。",WindowTitle.Create("保存先"));return;}outputPath=dialog.FileName;}
         var snapshot=System.Text.Json.JsonSerializer.Deserialize<AppSettings>(System.Text.Json.JsonSerializer.Serialize(settings))!;
-        var request=new ExportRequest(current,canvas.Crop,rangeStart,rangeEnd,outputPath,kind,snapshot){Masks=MaskSnapshot()};
+        var request=new ExportRequest(current,canvas.Crop,rangeStart,rangeEnd,outputPath,kind,snapshot){Masks=MaskSnapshot(),Narration=NarrationLines(kind)};
         exportCancel=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);exporting=true;SetBusy(true);cancel.Enabled=true;progress.Value=0;
         exportTask=ExportAsync(request,media,events,exportCancel.Token);
     }

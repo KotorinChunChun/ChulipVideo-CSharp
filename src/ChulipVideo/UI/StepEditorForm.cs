@@ -81,7 +81,7 @@ public sealed class StepEditorForm : BrandedForm
             Tool("再検出", Redetect, "入力ログから手順を作り直す"), Tool("追加", AddAtCurrent, "主画面の現在位置に手順を追加"),
             Tool("削除", DeleteSelected, "選択した手順を削除 (Delete)"), Tool("結合", MergeSelected, "選択した手順を1つにまとめる"),
             Tool("↑", () => MoveSelected(-1), "上へ移動"), Tool("↓", () => MoveSelected(1), "下へ移動"),
-            Tool("OCR説明", DescribeWithOcr, "選択した手順（未選択なら全手順）の対象名を文字認識で読み、説明文と強調枠にする"), Tool("書き出し…", ExportDocument, "Markdown・HTML・Word・PDFの手順書を書き出す"),
+            DescribeMenu(), Tool("書き出し…", ExportDocument, "Markdown・HTML・Word・PDFの手順書を書き出す"),
             Tool("保存", () => Save(), "手順ファイルへ保存 (Ctrl+S)"), cancel
         ]);
         root.Controls.Add(toolbar, 0, 0);
@@ -349,10 +349,53 @@ public sealed class StepEditorForm : BrandedForm
     /// <summary>除外した手順を数えない、手順書での番号。</summary>
     private int NumberOf(StepItem step) => Document.Steps.TakeWhile(s => !ReferenceEquals(s, step)).Count(s => s.Enabled) + 1;
 
+    private Button DescribeMenu()
+    {
+        var button = Tool("説明文 ▼", () => { }, "選択した手順（未選択なら全手順）の説明文を、文字認識またはAIで作る");
+        var menu = new ContextMenuStrip();
+        menu.Items.Add("文字認識（OCR）で対象名を読む", null, (_, _) => DescribeWithOcr());
+        menu.Items.Add("AIで作る（Claude、送信前に確認）…", null, (_, _) => DescribeWithAi());
+        button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
+        return button;
+    }
+
+    private StepItem[] DescribeTargets() => (list.SelectedIndices.Count > 0 ? list.SelectedIndices.Cast<int>().Select(i => Document.Steps[i]) : Document.Steps.Where(s => s.Enabled)).ToArray();
+
+    /// <summary>
+    /// AIで説明文を作る（R10）。既定は無効。送る画像（マスク・注釈を適用）を先に作り、枚数と内容を確認してから送る。
+    /// </summary>
+    private void DescribeWithAi()
+    {
+        if (!settings.Ai.Enabled) { MessageBox.Show(this, "AIによる説明文は無効です。社内規程を確認のうえ、「設定」→「認識・AI」で有効にしてください。", Text, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        if (Ai.CredentialStore.Read(Ai.CredentialStore.AnthropicTarget) is null && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")))
+        { MessageBox.Show(this, "APIキーが設定されていません。「設定」→「認識・AI」で保存してください。", Text, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        var targets = DescribeTargets();
+        if (targets.Length == 0) { Status("手順がありません。"); return; }
+        int select = list.SelectedIndices.Count > 0 ? list.SelectedIndices[0] : 0;
+        _ = RunAsync("送る画像を準備しています…", async token =>
+        {
+            var items = await Ai.ClaudeStepDescriber.PrepareAsync(media, info, events, Document, targets, settings, masks, token);
+            if (IsDisposed) return;
+            long bytes = items.Sum(i => (long)i.Png.Length);
+            string confirm = $"次の内容をAnthropic（Claude API、モデル {settings.Ai.Model}）へ送ります。\n\n" +
+                $"・手順の画像 {items.Count} 枚（計 {bytes / 1024.0:0} KB、マスクと注釈を適用済み、長辺{Ai.ClaudeStepDescriber.MaxImageEdge}px以下）\n" +
+                "・各手順の操作の種類・今の説明文・前の手順の説明文\n\n業務画面を外部へ送ります。社内規程で認められている場合だけ送信してください。送信しますか。";
+            if (MessageBox.Show(this, confirm, WindowTitle.Create("AIへの送信の確認"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            { Status("AIへの送信を取り消しました。"); return; }
+            var (updated, failures) = await Ai.ClaudeStepDescriber.CreateDefault().DescribeAsync(settings.Ai.Model, items, new Progress<string>(Status), token);
+            if (IsDisposed) return;
+            if (updated > 0) MarkDirty();
+            RefreshList(select);
+            Status($"{updated} 件の手順の説明文をAIで作りました。");
+            if (failures.Count > 0)
+                MessageBox.Show(this, $"{updated} 件を作りました。次の手順は説明文を変えていません。\n\n" + string.Join("\n", failures.Take(10)), Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        });
+    }
+
     private void DescribeWithOcr()
     {
         if (Recognition.OcrService.Unavailable() is string reason) { MessageBox.Show(this, reason, Text, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-        var targets = (list.SelectedIndices.Count > 0 ? list.SelectedIndices.Cast<int>().Select(i => Document.Steps[i]) : Document.Steps).ToArray();
+        var targets = DescribeTargets();
         if (targets.Length == 0) { Status("手順がありません。"); return; }
         int select = list.SelectedIndices.Count > 0 ? list.SelectedIndices[0] : 0;
         _ = RunAsync("文字を読み取っています…", async token =>
