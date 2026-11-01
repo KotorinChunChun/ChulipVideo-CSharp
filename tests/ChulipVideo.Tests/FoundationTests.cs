@@ -6,7 +6,7 @@ using EventLog = ChulipVideo.Export.EventLog;
 
 namespace ChulipVideo.Tests;
 
-/// <summary>v0.3.0 P1の基盤（操作抽出・フレーム比較・動き量・合成処理の一本化）を検証する。</summary>
+/// <summary>v0.2.2 P1の基盤（操作抽出・フレーム比較・動き量・合成処理の一本化）を検証する。</summary>
 internal static class FoundationTests
 {
     public static void Run(string directory)
@@ -44,6 +44,14 @@ internal static class FoundationTests
         Check(actions[6].Time == 8.0 && actions[6].EndTime == 8.5, "連続するホイールを結合");
         Check(actions[7].Label == "Enter", "単独の特殊キー");
         Check(InputActions.Extract(log, 1, 3).Select(a => a.Kind).SequenceEqual([InputActionKind.RightClick, InputActionKind.Drag]), "区間で絞り込む");
+        // CapchunWindowの記号・テンキーの名前と、入力中のBSは1件の文字入力にまとめる。
+        var typed = InputActions.Extract(new EventLog([
+            new(0, 0, 1, 1, "None", "Slash"), new(.1, 1, 1, 1, "None", "None"), new(.2, 2, 1, 1, "None", "Num1"), new(.3, 3, 1, 1, "None", "None"),
+            new(.4, 4, 1, 1, "None", "BS"), new(.5, 5, 1, 1, "None", "None"), new(.6, 6, 1, 1, "None", "Shift,Semicolon"), new(.7, 7, 1, 1, "None", "None"),
+            new(3, 30, 1, 1, "None", "BS"), new(3.1, 31, 1, 1, "None", "None"), new(4, 40, 1, 1, "None", "Ctrl,Slash"), new(4.1, 41, 1, 1, "None", "None")
+        ]));
+        Check(typed.Count == 3 && typed[0].Kind == InputActionKind.Text && typed[0].Keys.SequenceEqual(["Slash", "Num1", "BS", "Semicolon"]), "記号・テンキー・入力中のBSを文字入力へまとめる");
+        Check(typed[1] is { Kind: InputActionKind.Shortcut, Label: "BS" } && typed[2] is { Kind: InputActionKind.Shortcut, Label: "Ctrl + Slash" }, "単独のBSと修飾キー付きの記号はショートカット");
         var held = new EventLog([new(0, 0, 5, 5, "L-Click", "None"), new(.5, 5, 5, 5, "L-Click", "None")]);
         Check(InputActions.Extract(held).Single().Kind == InputActionKind.Click, "ログ末尾まで押されたままのクリック");
     }

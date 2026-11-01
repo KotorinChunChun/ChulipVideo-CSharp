@@ -81,13 +81,24 @@ public static class InputActions
         actions.Add(new(kind, time, endTime, point, null, label, modifiers));
     }
 
+    // CapchunWindowは修飾なしの文字・数字を1文字、テンキーと記号を次の名前で記録する（InputBuffer.GetKeyName）。
+    private static readonly HashSet<string> TextKeys =
+    [
+        "Space", "Semicolon", "Plus", "Comma", "Minus", "Period", "Slash", "Backtick", "LeftBracket", "Backslash", "RightBracket", "Quote", "Oem8", "Oem102",
+        "NumMultiply", "NumAdd", "NumSeparator", "NumSubtract", "NumDecimal", "NumDivide",
+        "Num0", "Num1", "Num2", "Num3", "Num4", "Num5", "Num6", "Num7", "Num8", "Num9"
+    ];
+
+    public static bool IsTextKey(string key) => key.Length == 1 || TextKeys.Contains(key);
+
     private static void AddKey(List<InputAction> actions, double time, Point point, string key, string[] modifiers)
     {
-        bool printable = key.Length == 1 || key == "Space";
-        if (printable && !modifiers.Any(m => m != "Shift"))
+        bool plain = !modifiers.Any(m => m != "Shift");
+        bool continuing = actions.Count > 0 && actions[^1].Kind == InputActionKind.Text && time - actions[^1].EndTime <= TextMergeGap;
+        // 文字入力中の打ち直し（BS）は、別の手順にせず入力の一部として扱う。
+        if (plain && (IsTextKey(key) || key == "BS" && continuing))
         {
-            if (actions.Count > 0 && actions[^1] is { Kind: InputActionKind.Text } previous && time - previous.EndTime <= TextMergeGap)
-                actions[^1] = previous with { EndTime = time, Keys = [.. previous.Keys, key] };
+            if (continuing) actions[^1] = actions[^1] with { EndTime = time, Keys = [.. actions[^1].Keys, key] };
             else actions.Add(new(InputActionKind.Text, time, time, point, null, "文字入力", [key]));
             return;
         }

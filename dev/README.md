@@ -1,6 +1,6 @@
 # 開発資料
 
-計画中（v0.3.0〜v0.5.0、手順書・マスク・動画演出・OCR・AI）：[要求](history/v0.3.0/v0.3.0-req.md) / [設計・実装計画](history/v0.3.0/v0.3.0-imp.md) / [進捗](history/v0.3.0/v0.3.0-task.md)。
+開発中（v0.2.2、手順書・マスク・動画演出・OCR・AI）：[要求](history/v0.2.2/v0.2.2-req.md) / [設計・実装計画](history/v0.2.2/v0.2.2-imp.md) / [進捗](history/v0.2.2/v0.2.2-task.md)。
 
 配布対応：[v0.2.1 要求](history/v0.2.1/v0.2.1-req.md) / [実装・公開報告](history/v0.2.1/v0.2.1-imp.md)。
 

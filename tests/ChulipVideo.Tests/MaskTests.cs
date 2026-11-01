@@ -9,7 +9,7 @@ using EventLog = ChulipVideo.Export.EventLog;
 
 namespace ChulipVideo.Tests;
 
-/// <summary>v0.3.0 P3のマスク（R4）を、描画・保存・編集・全出力経路で検証する。</summary>
+/// <summary>v0.2.2 P3のマスク（R4）を、描画・保存・編集・全出力経路で検証する。</summary>
 internal static class MaskTests
 {
     private const BindingFlags Hidden = BindingFlags.Instance | BindingFlags.NonPublic;

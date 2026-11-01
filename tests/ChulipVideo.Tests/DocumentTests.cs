@@ -11,7 +11,7 @@ using EventLog = ChulipVideo.Export.EventLog;
 
 namespace ChulipVideo.Tests;
 
-/// <summary>v0.3.0 P4の注釈（R5）と手順書の書き出し（R2）を検証する。</summary>
+/// <summary>v0.2.2 P4の注釈（R5）と手順書の書き出し（R2）を検証する。</summary>
 internal static class DocumentTests
 {
     private const BindingFlags Hidden = BindingFlags.Instance | BindingFlags.NonPublic;

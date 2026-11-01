@@ -9,7 +9,7 @@ using EventLog = ChulipVideo.Export.EventLog;
 
 namespace ChulipVideo.Tests;
 
-/// <summary>v0.3.0 P2のステップ抽出・保存・手順書エディターを検証する。</summary>
+/// <summary>v0.2.2 P2のステップ抽出・保存・手順書エディターを検証する。</summary>
 internal static class StepTests
 {
     private const BindingFlags Hidden = BindingFlags.Instance | BindingFlags.NonPublic;
