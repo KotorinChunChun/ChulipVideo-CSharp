@@ -59,6 +59,7 @@ public sealed partial class MainForm
             ActionButton("場所", OpenFolder, null, "選択動画のフォルダーを開く", true),
             ActionButton("TSV", OpenInputLog, null, "対応する入力履歴TSVを開く", true),
             ActionButton("手順", OpenStepEditor, PngTone, "入力ログから手順書の手順を抽出・編集", true),
+            ActionButton("区間", OpenClipList, null, "区間とマーカーの一覧・一括書き出し（M: マーカー追加、,/.: 前後のマーカー）", true),
             ActionButton("設定", OpenSettings, null, "全般・詳細設定", true),
             ActionButton("再読込", () => RunUiAsync(() => LoadAsync(current?.Path)), DetailTone, "動画・設定・TSVを読み直す", true),
             ActionButton("保存", SaveVideo, SaveTone, "動画別設定を保存", true),

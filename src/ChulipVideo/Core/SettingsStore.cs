@@ -103,6 +103,8 @@ public sealed class SettingsStore(string? path = null)
             settings.End = FiniteClamp(settings.End,Math.Min(media.Duration,settings.Start+1/media.Fps),media.Duration);
             settings.Position = FiniteClamp(settings.Position,0,media.LastFrameTime);
             settings.Masks = NormalizeMasks(settings.Masks,media);
+            settings.Clips = NormalizeClips(settings.Clips,media);
+            settings.Markers = NormalizeMarkers(settings.Markers,media);
             return settings;
         }
         catch(Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or InvalidOperationException or KeyNotFoundException or FormatException or OverflowException)
@@ -132,6 +134,26 @@ public sealed class SettingsStore(string? path = null)
         }
         return result;
     }
+
+    public static List<ClipRegion> NormalizeClips(IEnumerable<ClipRegion?>? clips, MediaInfo media)
+    {
+        var result = new List<ClipRegion>();
+        foreach (var clip in clips ?? [])
+        {
+            if (clip is null) continue;
+            clip.Id = string.IsNullOrWhiteSpace(clip.Id) ? Guid.NewGuid().ToString("N") : clip.Id;
+            clip.Name = string.IsNullOrWhiteSpace(clip.Name) ? $"区間{result.Count + 1}" : clip.Name.Trim();
+            clip.Start = FiniteClamp(clip.Start,0,media.LastFrameTime);
+            clip.End = FiniteClamp(clip.End,Math.Min(media.Duration,clip.Start+1/media.Fps),media.Duration);
+            clip.Crop = clip.Crop is CropRect crop && crop.Width > 0 && crop.Height > 0 ? crop.Clamp(media.Width,media.Height,true) : null;
+            result.Add(clip);
+        }
+        return result;
+    }
+
+    public static List<Marker> NormalizeMarkers(IEnumerable<Marker?>? markers, MediaInfo media) =>
+        (markers ?? []).Where(m => m is not null).Select(m => m! with { Time = media.FrameTime(FiniteClamp(m!.Time,0,media.LastFrameTime)), Label = m.Label ?? "" })
+            .OrderBy(m => m.Time).ToList();
 
     private static double FiniteClamp(double x,double min,double max) => Math.Clamp(double.IsFinite(x)?x:min,min,Math.Max(min,max));
     public static void SaveVideo(MediaInfo info, VideoSettings settings) => WriteAtomic(VideoPath(info.Path),settings);

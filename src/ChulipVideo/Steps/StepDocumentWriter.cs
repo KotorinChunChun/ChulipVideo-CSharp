@@ -11,7 +11,8 @@ namespace ChulipVideo.Steps;
 [Flags]
 public enum StepDocumentFormat { None = 0, Markdown = 1, Html = 2, Word = 4, Pdf = 8 }
 
-public sealed record StepExportOptions(string Title, StepDocumentFormat Formats, string ParentDirectory);
+/// <summary>FolderNameを省くと「動画名_手順書_日時」のフォルダーを作る。</summary>
+public sealed record StepExportOptions(string Title, StepDocumentFormat Formats, string ParentDirectory, string? FolderName = null);
 
 /// <summary>出力先フォルダー、作成したファイル、PDFを作れなかった場合の理由。</summary>
 public sealed record StepExportResult(string Directory, IReadOnlyList<string> Files, string? PdfWarning);
@@ -32,7 +33,7 @@ public static class StepDocumentWriter
         if (steps.Length == 0) throw new ArgumentException("手順書に含める手順がありません。");
         string parent = Path.GetFullPath(options.ParentDirectory);
         if (!Directory.Exists(parent)) throw new DirectoryNotFoundException("保存先フォルダーがありません: " + parent);
-        string target = Path.Combine(parent, SafeName($"{Path.GetFileNameWithoutExtension(media.Path)}_{BaseName}_{DateTime.Now:yyyyMMdd_HHmmss}"));
+        string target = Path.Combine(parent, SafeName(options.FolderName ?? $"{Path.GetFileNameWithoutExtension(media.Path)}_{BaseName}_{DateTime.Now:yyyyMMdd_HHmmss}"));
         if (Directory.Exists(target) || File.Exists(target)) throw new IOException("保存先は既に存在します: " + target);
         // 一時フォルダーで作り、完成してから移す（途中で失敗・中断しても不完全な手順書を残さない）。
         string stage = Path.Combine(parent, ".chulip-export-" + Guid.NewGuid().ToString("N"));

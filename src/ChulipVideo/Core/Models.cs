@@ -33,6 +33,26 @@ public sealed record VideoSettings
     public double Position { get; set; }
     public bool AllowOutside { get; set; }
     public List<MaskRegion> Masks { get; set; } = [];
+    public List<ClipRegion> Clips { get; set; } = [];
+    public List<Marker> Markers { get; set; } = [];
+}
+
+/// <summary>一括書き出しの単位となる区間（R11）。Cropがnullなら書き出し時の切り出し範囲を使う。</summary>
+public sealed record ClipRegion
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Name { get; set; } = "";
+    public bool Enabled { get; set; } = true;
+    public double Start { get; set; }
+    public double End { get; set; }
+    public CropRect? Crop { get; set; }
+}
+
+/// <summary>タイムライン上の目印（R11）。</summary>
+public sealed record Marker
+{
+    public double Time { get; set; }
+    public string Label { get; set; } = "";
 }
 
 [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<MaskMode>))]

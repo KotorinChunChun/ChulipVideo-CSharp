@@ -103,8 +103,8 @@ public sealed partial class MainForm : BrandedForm
             settings.LastVideoPath=Path.GetFullPath(path);
             sourcePath.Text=settings.LastVideoPath;tips.SetToolTip(sourcePath,settings.LastVideoPath);
             syncing=true;canvas.VideoSize=new(current.Width,current.Height);outside.Checked=videoSettings.AllowOutside;canvas.AllowOutside=outside.Checked;
-            masks=videoSettings.Masks;canvas.SelectedMask=-1;canvas.Crop=videoSettings.Crop;rangeStart=videoSettings.Start;rangeEnd=videoSettings.End;currentTime=videoSettings.Position;syncing=false;
-            history.Clear();historyIndex=-1;RememberCrop();SyncTimes();SyncCrop();canvas.ResetView();RequestFrame();SyncIdle();
+            masks=videoSettings.Masks;clips=videoSettings.Clips;markers=videoSettings.Markers;canvas.SelectedMask=-1;canvas.Crop=videoSettings.Crop;rangeStart=videoSettings.Start;rangeEnd=videoSettings.End;currentTime=videoSettings.Position;syncing=false;
+            history.Clear();historyIndex=-1;RememberCrop();SyncTimes();SyncCrop();canvas.ResetView();RequestFrame();SyncIdle();SyncClips();
             Status(warning??current.TimingWarning??$"読み込み完了 / 入力ログ {events.Count} 件");TrySaveApp();
         }
         finally {loading=false;SetBusy(false);}
@@ -230,7 +230,7 @@ public sealed partial class MainForm : BrandedForm
     private void SaveVideo()
     {
         if(current is null)return;
-        try{SettingsStore.SaveVideo(current,new(){Crop=canvas.Crop,Start=rangeStart,End=rangeEnd,Position=currentTime,AllowOutside=outside.Checked,Masks=MaskSnapshot().ToList()});TrySaveApp();Status("動画設定を保存しました: "+SettingsStore.VideoPath(current.Path));}catch(Exception ex){ShowError(ex);}
+        try{SettingsStore.SaveVideo(current,new(){Crop=canvas.Crop,Start=rangeStart,End=rangeEnd,Position=currentTime,AllowOutside=outside.Checked,Masks=MaskSnapshot().ToList(),Clips=clips.Select(c=>c with{}).ToList(),Markers=markers.Select(m=>m with{}).ToList()});TrySaveApp();Status("動画設定を保存しました: "+SettingsStore.VideoPath(current.Path));}catch(Exception ex){ShowError(ex);}
     }
     private void TrySaveApp(){try{store.Save(settings);}catch(Exception ex) when(ex is IOException or UnauthorizedAccessException){Status("設定を保存できません: "+ex.Message);}}
     private void OpenSettings()
@@ -308,7 +308,7 @@ public sealed partial class MainForm : BrandedForm
         finally{exporting=false;exportCancel?.Dispose();exportCancel=null;if(!closing){cancel.Enabled=false;SetBusy(false);}}
     }
     private void SetBusy(bool busy){foreach(var c in busyControls)c.Enabled=!busy;speed.Enabled=range.Enabled=loop.Enabled=pingpong.Enabled=!busy;}
-    private void ShowHelp()=>MessageBox.Show(this,"動画を選択し、開始・終了とクロップを指定して保存します。\n\nSpace: 再生/停止　←/→: 0.1秒　Ctrl+←/→: 1秒\nHome/End: 区間端　Ctrl+Home/End: 動画端\nI/O: 現在位置を開始/終了に設定（文字・数値入力中を除く）\nCtrl+C: 画像コピー　Ctrl+S: PNG保存　Ctrl+Z/Y: 戻す/進む\nAlt+矢印: 1px移動　Shift+矢印: 中心固定で伸縮（Ctrl併用10px）\n左ドラッグ: 選択/移動　枠ドラッグ: サイズ変更\nShift: 比率/移動軸を固定　Ctrl: 中心固定　Alt: 10px刻み\nホイール: ズーム　中ドラッグ: パン　中ダブルクリック: リセット\n\n時刻は秒数、mm:ss、hh:mm:ss.fffで入力できます。\nクロップの「比率」はプリセットの絞り込み用です。枠の比率は固定しません。\n動画と同名のTSVがあればマウス・キー操作を表示します。\n動画別設定は上部の「保存」で保存します。Python版.settings.jsonも読み込めます。\nMP4/GIFは音声なし。「動画へ焼込み」は出力欄で変更できます。",WindowTitle.Create("使い方"));
+    private void ShowHelp()=>MessageBox.Show(this,"動画を選択し、開始・終了とクロップを指定して保存します。\n\nSpace: 再生/停止　←/→: 0.1秒　Ctrl+←/→: 1秒\nHome/End: 区間端　Ctrl+Home/End: 動画端\nI/O: 現在位置を開始/終了に設定（文字・数値入力中を除く）\nM: マーカー追加　, / .: 前後のマーカーへ\nCtrl+C: 画像コピー　Ctrl+S: PNG保存　Ctrl+Z/Y: 戻す/進む\nAlt+矢印: 1px移動　Shift+矢印: 中心固定で伸縮（Ctrl併用10px）\n左ドラッグ: 選択/移動　枠ドラッグ: サイズ変更\nShift: 比率/移動軸を固定　Ctrl: 中心固定　Alt: 10px刻み\nホイール: ズーム　中ドラッグ: パン　中ダブルクリック: リセット\n\n時刻は秒数、mm:ss、hh:mm:ss.fffで入力できます。\nクロップの「比率」はプリセットの絞り込み用です。枠の比率は固定しません。\n動画と同名のTSVがあればマウス・キー操作を表示します。\n動画別設定は上部の「保存」で保存します。Python版.settings.jsonも読み込めます。\nMP4/GIFは音声なし。「動画へ焼込み」は出力欄で変更できます。",WindowTitle.Create("使い方"));
 
     protected override bool ProcessCmdKey(ref Message msg,Keys keyData)
     {
@@ -317,6 +317,7 @@ public sealed partial class MainForm : BrandedForm
         if(ctrl&&key==Keys.O){ChooseVideo();return true;}
         if(ActiveControl is TextBoxBase or NumericUpDown or ComboBox || ContainsFocusedNumeric(this))return base.ProcessCmdKey(ref msg,keyData);
         if(maskEdit.Checked&&key==Keys.Delete&&!ctrl&&!alt&&!shift){DeleteSelectedMask();return true;}
+        if(!ctrl&&!alt&&!shift&&key==Keys.M){AddMarker();return true;}if(!ctrl&&!alt&&!shift&&key==Keys.Oemcomma){JumpMarker(-1);return true;}if(!ctrl&&!alt&&!shift&&key==Keys.OemPeriod){JumpMarker(1);return true;}
         if(!ctrl&&!alt&&!shift&&key==Keys.I){SetRange(currentTime,rangeEnd);return true;}
         if(!ctrl&&!alt&&!shift&&key==Keys.O){SetRange(rangeStart,currentTime);return true;}
         if(ctrl&&key==Keys.C){RunUiAsync(CopyAsync);return true;}if(ctrl&&key==Keys.S){RunUiAsync(SaveImageAsync);return true;}if(ctrl&&key==Keys.Z){Undo();return true;}if(ctrl&&key==Keys.Y){Redo();return true;}
