@@ -112,6 +112,19 @@ public sealed record ZoomSettings
     public double Pan { get; set; } = .6;
 }
 
+/// <summary>無操作区間のカット・早送り（R7）。Modeは Off / Cut / Speed。</summary>
+public sealed record IdleSettings
+{
+    public string Mode { get; set; } = "Off";
+    /// <summary>入力も画面の変化もない状態が、この秒数以上続いたら無操作区間とする。</summary>
+    public double MinSeconds { get; set; } = 3;
+    /// <summary>無操作区間の前後に残す秒数。</summary>
+    public double Margin { get; set; } = .5;
+    /// <summary>早送りの倍率。</summary>
+    public double Speed { get; set; } = 4;
+    [System.Text.Json.Serialization.JsonIgnore] public bool Enabled => Mode is "Cut" or "Speed";
+}
+
 /// <summary>静止判定・重複除外の許容差。0・0は完全一致。</summary>
 public sealed record StabilitySettings
 {
@@ -149,6 +162,7 @@ public sealed record AppSettings
     public StabilitySettings Stability { get; set; } = new();
     public StepSettings Steps { get; set; } = new();
     public ZoomSettings Zoom { get; set; } = new();
+    public IdleSettings Idle { get; set; } = new();
     public int PngCompression { get; set; } = 3;
     public bool BurnOverlay { get; set; }
     public bool ExportTsv { get; set; } = true;

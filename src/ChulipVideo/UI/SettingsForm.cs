@@ -15,7 +15,7 @@ public sealed class SettingsForm : BrandedForm
 
     public SettingsForm(AppSettings settings)
     {
-        Settings = settings with { Overlay = settings.Overlay with { }, Stability = settings.Stability with { }, Steps = settings.Steps with { }, Zoom = settings.Zoom with { }, Presets = settings.Presets.Select(x => x with { }).ToList() };
+        Settings = settings with { Overlay = settings.Overlay with { }, Stability = settings.Stability with { }, Steps = settings.Steps with { }, Zoom = settings.Zoom with { }, Idle = settings.Idle with { }, Presets = settings.Presets.Select(x => x with { }).ToList() };
         Text = WindowTitle.Create("詳細設定");
         StartPosition = FormStartPosition.CenterParent;
         MinimumSize = new Size(540, 420);
@@ -168,6 +168,12 @@ public sealed class SettingsForm : BrandedForm
         Row(table, "続けて寄る間隔 (秒)", Number((decimal)z.MergeGap, 0, 10, x => z.MergeGap = (double)x, 2, 0.1m));
         Row(table, "中心の移動時間 (秒)", Number((decimal)z.Pan, 0.05m, 5, x => z.Pan = (double)x, 2, 0.05m));
         Note(table, "MP4・GIFの書き出しで、クリックの位置へ滑らかに寄って戻ります。字幕は拡大しません。PNG連番と手順書には使いません。主画面の「演出を表示」で、写る範囲を枠で確認できます。");
+        var idle = Settings.Idle;
+        Row(table, "操作のない区間", Choice(idle.Mode, [("Off", "そのまま"), ("Cut", "カットする"), ("Speed", "早送りする")], x => idle.Mode = x));
+        Row(table, "何秒以上続いたら対象にするか", Number((decimal)idle.MinSeconds, 0.5m, 600, x => idle.MinSeconds = (double)x, 1, 0.5m));
+        Row(table, "前後に残す秒数", Number((decimal)idle.Margin, 0, 10, x => idle.Margin = (double)x, 2, 0.1m));
+        Row(table, "早送りの倍率", Number((decimal)idle.Speed, 1.5m, 64, x => idle.Speed = (double)x, 1, 0.5m));
+        Note(table, "入力も画面の変化もない区間を、MP4・GIFの書き出しでカットまたは早送りします。字幕・TSVの時刻も出力に合わせます。主画面の「演出を表示」で、対象の区間をタイムラインに斜線で表示します。");
     }
 
     private void BuildPointer(TableLayoutPanel table)

@@ -159,16 +159,21 @@ public sealed class EventLog
     /// 切り出し開始を0秒・クロップ原点を(0,0)とする入力ログ。viewを渡すと（自動ズーム）、各行の時刻の表示範囲で
     /// 出力動画の座標へ変換する（生成した動画を再編集してもポインターがずれない）。範囲外(-1)の座標はそのまま残す。
     /// </summary>
-    public string ToTsv(double start, double end, double fps, CropRect crop, Func<double, RectangleF>? view)
+    /// timeを渡すと（無操作区間のカット・早送り）、各行の時刻を出力の時刻へ写す。
+    public string ToTsv(double start, double end, double fps, CropRect crop, Func<double, RectangleF>? view, Func<double, double>? time = null)
     {
-        if (view is null) return ToTsv(start, end, fps, crop);
+        if (view is null && time is null) return ToTsv(start, end, fps, crop);
         var text = new StringBuilder("timestamp\tframe\tx\ty\tclick\tkeys\n");
         foreach (var row in Rows(start, end))
         {
-            double relative = Math.Max(0, row.Timestamp - start);
-            var v = view(row.Timestamp);
-            int x = row.X < 0 ? row.X : (int)Math.Round((row.X - v.X) * crop.Width / v.Width);
-            int y = row.Y < 0 ? row.Y : (int)Math.Round((row.Y - v.Y) * crop.Height / v.Height);
+            double relative = time?.Invoke(row.Timestamp) ?? Math.Max(0, row.Timestamp - start);
+            int x = row.X - crop.X, y = row.Y - crop.Y;
+            if (view is not null)
+            {
+                var v = view(row.Timestamp);
+                x = row.X < 0 ? row.X : (int)Math.Round((row.X - v.X) * crop.Width / v.Width);
+                y = row.Y < 0 ? row.Y : (int)Math.Round((row.Y - v.Y) * crop.Height / v.Height);
+            }
             text.Append(CultureInfo.InvariantCulture, $"{relative:F3}\t{(int)Math.Floor(relative * fps + 1e-7)}\t{x}\t{y}\t{row.Click}\t{row.Keys}\n");
         }
         return text.ToString();
@@ -199,7 +204,8 @@ public sealed class EventLog
         return text.ToString();
     }
 
-    public string ToSubtitles(double start, double end, OverlayOptions options, bool webVtt)
+    /// <summary>timeを渡すと、字幕の開始・終了を出力の時刻へ写す。カットで長さが0になった字幕は出さない。</summary>
+    public string ToSubtitles(double start, double end, OverlayOptions options, bool webVtt, Func<double, double>? time = null)
     {
         double fade = Math.Max(.01, options.FadeDuration);
         var points = Captions.SelectMany(c => new[] { c.Start, c.HeldUntil + fade })
@@ -219,8 +225,10 @@ public sealed class EventLog
         int index = 0;
         foreach (var cue in cues)
         {
+            double from = time?.Invoke(cue.Start) ?? cue.Start - start, to = time?.Invoke(cue.End) ?? cue.End - start;
+            if (to - from < .001) continue;
             if (!webVtt) output.Append(++index).Append('\n');
-            output.Append(Timestamp(cue.Start - start, webVtt)).Append(" --> ").Append(Timestamp(cue.End - start, webVtt)).Append('\n');
+            output.Append(Timestamp(from, webVtt)).Append(" --> ").Append(Timestamp(to, webVtt)).Append('\n');
             output.Append(cue.Text).Append("\n\n");
         }
         return output.ToString();

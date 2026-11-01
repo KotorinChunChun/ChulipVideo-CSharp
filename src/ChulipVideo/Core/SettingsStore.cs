@@ -31,6 +31,10 @@ public sealed class SettingsStore(string? path = null)
             settings.Steps ??= new();
             settings.Steps.PreSeconds = FiniteClamp(settings.Steps.PreSeconds, 0, 5);
             settings.Steps.PostSeconds = FiniteClamp(settings.Steps.PostSeconds, 0, 5);
+            settings.Idle ??= new();
+            var idle = settings.Idle;
+            idle.Mode = idle.Mode is "Cut" or "Speed" ? idle.Mode : "Off";
+            idle.MinSeconds = FiniteClamp(idle.MinSeconds, .5, 600); idle.Margin = FiniteClamp(idle.Margin, 0, 10); idle.Speed = FiniteClamp(idle.Speed, 1.5, 64);
             settings.Zoom ??= new();
             var z = settings.Zoom;
             z.Scale = FiniteClamp(z.Scale, 1, 4); z.Lead = FiniteClamp(z.Lead, 0, 5); z.Hold = FiniteClamp(z.Hold, 0, 10);

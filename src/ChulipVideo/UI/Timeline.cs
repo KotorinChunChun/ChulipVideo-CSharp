@@ -9,6 +9,8 @@ public sealed class Timeline : Control
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] public double Position {get;set;}
     /// <summary>下端に帯で示すマスクの時間帯（開始・終了の秒）。</summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] public IReadOnlyList<(double Start, double End)> MaskRanges {get;set;} = [];
+    /// <summary>カット・早送りされる無操作区間（開始・終了の秒）。線の上に斜線で示す。</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] public IReadOnlyList<(double Start, double End)> IdleRanges {get;set;} = [];
     public event Action<double>? Seek;
     public event Action<double>? StartChanged;
     public event Action<double>? EndChanged;
@@ -26,6 +28,8 @@ public sealed class Timeline : Control
         g.FillPolygon(Brushes.IndianRed,[new PointF(X(End)-6,36),new PointF(X(End)+6,36),new PointF(X(End),25)]);
         using(var mask=new SolidBrush(Color.FromArgb(0,160,190)))
             foreach(var (s,t) in MaskRanges) g.FillRectangle(mask,X(s),Height-3,Math.Max(2,X(t)-X(s)),3);
+        using(var hatch=new System.Drawing.Drawing2D.HatchBrush(System.Drawing.Drawing2D.HatchStyle.WideUpwardDiagonal,Color.FromArgb(150,80,80,80),Color.Transparent))
+            foreach(var (s,t) in IdleRanges) g.FillRectangle(hatch,X(s),15,Math.Max(2,X(t)-X(s)),10);
         g.FillEllipse(Brushes.White,X(Position)-6,14,12,12);
         g.DrawEllipse(Pens.Black,X(Position)-6,14,12,12);
     }
