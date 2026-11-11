@@ -6,7 +6,7 @@ Windows 11 x64向けの自己完結型ZIPを作ります。.NET Desktop Runtime 
 
 ## 配布前の準備
 
-1. `src/ChulipVideo/ChulipVideo.csproj`と`tool.json`の版をそろえます。
+1. `src/ChulipVideo/ChulipVideo.csproj`と`tool.json`のバージョンをそろえます。
 2. `dev/history/vX.Y.Z/`の要求・実装報告・検証結果を更新します。実デスクトップでの確認と自動テストの結果を区別して記録します。
 3. .NET 10 SDKとPowerShell 7を使用し、変更に対応するビルド・テストを完了します。
 
@@ -23,7 +23,7 @@ cd C:\develop\KotorinToys\tools\ChulipVideo
 ./dev/scripts/package.ps1
 ```
 
-スクリプトはcsprojの版を読み取り、`dev/history/vX.Y.Z/logs/package-日時-識別子/`を新規作成します。`dotnet publish -c Release -r win-x64 --self-contained true`を実行し、ビルド中間物もこの実行専用フォルダーへ分けます。既存の成果物や実行中の開発EXEを上書きせず、失敗時のログも残します。初回はNuGetから.NETランタイムパックを取得する場合があります。
+スクリプトはcsprojからバージョンを読み取り、実行ごとに`dev/history/vX.Y.Z/logs/package-日時-識別子/`を作成します。`dotnet publish -c Release -r win-x64 --self-contained true`を実行し、ビルドの中間ファイルも今回のフォルダーに保存します。既存の成果物や実行中の開発EXEは上書きせず、失敗時はログを残します。初回はNuGetから.NETランタイムパックを取得する場合があります。
 
 | 生成物 | 用途 |
 | --- | --- |
@@ -43,7 +43,7 @@ ZIPにはアプリの実行物、依存関係表から許可したランタイ�
 
 ## 公開
 
-公開先リポジトリ、対象コミット、タグ、公開版かプレリリースかを確定してから公開します。生成直前の`package-manifest.json`で元コミットと未コミット変更を確認し、公開対象ソースと配布物を一致させてください。
+公開先リポジトリ、対象コミット、タグ、公開版かプレリリースかを確定してから公開します。生成直前の`package-manifest.json`で元のコミットと未コミットの変更を確認し、公開するソースと配布物を一致させてください。
 
 公開先が確定したら、`package.ps1 -RepositoryUrl 'https://github.com/所有者/リポジトリ'`で最終成果物を生成します。引数は確定した実際のURLに置き換えてください。指定がない場合、本文のリンクはローカル確認用になります。URLを指定すると公開先のタグ`vX.Y.Z`にある操作ガイドと実装報告へのリンクを生成します。
 
